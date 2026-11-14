@@ -1,59 +1,51 @@
-# Frontend
+# FileGrid frontend
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 22.2.7.
+Angular 22 app (standalone components, strict TypeScript). UI in Romanian.
 
-## Development server
+## Run
 
-To start a local development server, run:
-
-```bash
-ng serve
+```sh
+npm ci
+npm run start:mock          # no backend needed: fixtures + a role switcher in the header
+API_PORT=8080 npm start     # real mode: Keycloak login, /api proxied to the backend
+npm test                    # role guard, API layer vs contract, chunked-upload resume
+npm run build               # production build in dist/frontend/browser
 ```
 
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
+The app runs on http://localhost:4200 (the redirect URI registered for the
+`filegrid-web` Keycloak client). `API_PORT` is the backend port for the dev
+proxy (default 8080); `GRAFANA_URL` is the Grafana target (default
+http://localhost:3000). Both are read by `proxy.conf.js`.
 
-## Code scaffolding
+## Configuration
 
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
+The app loads `/config.json` at start, so one build works everywhere:
 
-```bash
-ng generate component component-name
+| Key | Default | Docker env |
+|---|---|---|
+| `keycloakUrl` | `http://localhost:8180` | `KEYCLOAK_URL` |
+| `realm` | `filegrid` | `KEYCLOAK_REALM` |
+| `clientId` | `filegrid-web` | `KEYCLOAK_CLIENT_ID` |
+| `grafanaUrl` | `/grafana` | `GRAFANA_URL` |
+| `mock` | `false` | `MOCK_API` (`true` / `false`) |
+
+Nothing in it is secret: the app is a public OIDC client (Authorization Code +
+PKCE). Tokens stay in memory, never in localStorage.
+
+## Docker
+
+```sh
+docker build -t filegrid/frontend .
+docker run -p 8081:8080 -e KEYCLOAK_URL=https://auth.example.org filegrid/frontend
 ```
 
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
+nginx runs as a non-root user on port 8080, serves static files with an SPA
+fallback, `/healthz`, and a Content-Security-Policy. It does not proxy: the
+platform must route `/api` and `/grafana` on the same origin.
 
-```bash
-ng generate --help
-```
+## Structure
 
-## Building
-
-To build the project run:
-
-```bash
-ng build
-```
-
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
-
-## Running unit tests
-
-To execute unit tests with the [Vitest](https://vitest.dev/) test runner, use the following command:
-
-```bash
-ng test
-```
-
-## Running end-to-end tests
-
-For end-to-end (e2e) testing, run:
-
-```bash
-ng e2e
-```
-
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
-
-## Additional Resources
-
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
+- `src/app/core/api.ts`: the only file that knows the API's URLs and shapes.
+- `src/app/core/mock-backend.ts`: mock mode, an HTTP interceptor with fixtures.
+- `src/app/core/chunked-upload.ts`: video upload in parts, with retry and resume.
+- `src/app/{client,admin,employee}`: the pages for each role.

@@ -1,0 +1,6 @@
+# Included per location (nginx drops inherited add_header lines once a location adds its own).
+add_header X-Content-Type-Options "nosniff" always;
+add_header Referrer-Policy "no-referrer" always;
+# connect-src: the API (same origin) and Keycloak's token endpoint. frame-src 'self': embedded Grafana.
+# style-src needs 'unsafe-inline' because Angular injects component styles as <style> elements.
+add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' ${KEYCLOAK_URL}; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'" always;

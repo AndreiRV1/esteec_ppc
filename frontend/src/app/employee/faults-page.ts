@@ -1,0 +1,207 @@
+import { DatePipe, DecimalPipe } from '@angular/common';
+import { Component, inject, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
+import { ApiService, Loader, downloadAndSave, problemMessage } from '../core/api';
+import { BytesPipe, LabelPipe, countiesOf, dayToIso, localToIso } from '../core/format';
+import { Fault, FaultFilter, Page, REGIONS, Region, SEVERITIES, Severity, StoredRef } from '../core/models';
+import { Status } from '../ui/status';
+
+const emptyUpload = () => ({
+  region: '' as Region | '', county: '', locality: '', substationCode: '', occurredAt: '', restoredAt: '',
+  severity: 'MEDIUM' as Severity, cause: '', affectedCustomers: null as number | null, description: '',
+});
+
+/** Fault records: upload one (metadata + file), or search and download earlier ones. */
+@Component({
+  imports: [FormsModule, DatePipe, DecimalPipe, LabelPipe, BytesPipe, Status],
+  template: `
+    <div class="page">
+      <h1>Înregistrări de avarie</h1>
+      <div class="segmented" role="tablist">
+        <button type="button" role="tab" [attr.aria-selected]="tab() === 'upload'" (click)="tab.set('upload')">Încarcă</button>
+        <button type="button" role="tab" [attr.aria-selected]="tab() === 'search'" (click)="openSearch()">Caută și descarcă</button>
+      </div>
+
+      @if (tab() === 'upload') {
+        <form ngNativeValidate class="card" (ngSubmit)="upload()" #f="ngForm">
+          <fieldset [disabled]="sending()">
+            <div class="grid-2">
+              <label>Regiune
+                <select name="region" [(ngModel)]="draft.region" (ngModelChange)="draft.county = ''" required>
+                  <option value="" disabled>Alege regiunea</option>
+                  @for (r of regions; track r) { <option [value]="r">{{ r | label }}</option> }
+                </select>
+              </label>
+              <label>Județ
+                <select name="county" [(ngModel)]="draft.county" required [disabled]="!draft.region">
+                  <option value="" disabled>Alege județul</option>
+                  @for (c of counties(draft.region); track c.code) { <option [value]="c.name">{{ c.name }}</option> }
+                </select>
+              </label>
+              <label>Localitate <input name="locality" [(ngModel)]="draft.locality" required maxlength="100" /></label>
+              <label>Cod stație <input name="substation" [(ngModel)]="draft.substationCode" required maxlength="60" placeholder="ST-MUN-VOL-20" /></label>
+              <label>Momentul avariei <input name="occurredAt" type="datetime-local" [(ngModel)]="draft.occurredAt" required /></label>
+              <label>Alimentare restabilită la (dacă e cazul)
+                <input name="restoredAt" type="datetime-local" [(ngModel)]="draft.restoredAt" [min]="draft.occurredAt" />
+              </label>
+              <label>Severitate
+                <select name="severity" [(ngModel)]="draft.severity">
+                  @for (s of severities; track s) { <option [value]="s">{{ s | label }}</option> }
+                </select>
+              </label>
+              <label>Clienți afectați <input name="affected" type="number" [(ngModel)]="draft.affectedCustomers" min="0" step="1" /></label>
+              <label>Cauză <input name="cause" [(ngModel)]="draft.cause" maxlength="200" /></label>
+              <label>Fișierul înregistrării
+                <input type="file" required (change)="pick($event)" />
+              </label>
+            </div>
+            <label>Descriere <textarea name="description" [(ngModel)]="draft.description" maxlength="2000"></textarea></label>
+          </fieldset>
+          @if (error(); as message) { <p class="notice error" role="alert">{{ message }}</p> }
+          @if (stored(); as ref) {
+            <div class="notice success" role="status">
+              <p><strong>Înregistrarea a fost încărcată</strong> și este disponibilă pentru dispecerat.</p>
+              <p>SHA-256: <span class="data">{{ ref.sha256 }}</span></p>
+            </div>
+          }
+          <div class="row"><button type="submit" [disabled]="sending()">{{ sending() ? 'Se încarcă…' : 'Încarcă înregistrarea' }}</button></div>
+        </form>
+      } @else {
+        <form ngNativeValidate class="row filters" (ngSubmit)="search(0)">
+          <label>Regiune
+            <select name="region" [(ngModel)]="filter.region" (ngModelChange)="filter.county = ''">
+              <option value="">Toate</option>
+              @for (r of regions; track r) { <option [value]="r">{{ r | label }}</option> }
+            </select>
+          </label>
+          <label>Județ
+            <select name="county" [(ngModel)]="filter.county">
+              <option value="">Toate</option>
+              @for (c of counties(filter.region); track c.code) { <option [value]="c.name">{{ c.name }}</option> }
+            </select>
+          </label>
+          <label>Severitate
+            <select name="severity" [(ngModel)]="filter.severity">
+              <option value="">Toate</option>
+              @for (s of severities; track s) { <option [value]="s">{{ s | label }}</option> }
+            </select>
+          </label>
+          <label>De la <input name="from" type="date" [(ngModel)]="fromDay" /></label>
+          <label>Până la <input name="to" type="date" [(ngModel)]="toDay" /></label>
+          <button type="submit">Caută</button>
+        </form>
+
+        <fg-status [of]="results" />
+        @if (note(); as n) { <p class="notice" [class.success]="n.ok" [class.error]="!n.ok" role="status">{{ n.text }}</p> }
+        @if (results.data(); as found) {
+          @if (found.items.length === 0) {
+            <p class="notice">Nicio avarie nu corespunde filtrelor alese.</p>
+          } @else {
+            <div class="table-wrap">
+              <table class="stack">
+                <thead><tr><th>Moment</th><th>Stație</th><th>Zonă</th><th>Severitate</th><th>Clienți afectați</th><th>Stare</th><th>Fișier</th></tr></thead>
+                <tbody>
+                  @for (fault of found.items; track fault.id) {
+                    <tr>
+                      <td data-label="Moment">{{ fault.occurredAt | date: 'd MMM y, HH:mm' }}</td>
+                      <td data-label="Stație" class="data">{{ fault.substationCode }}</td>
+                      <td data-label="Zonă">{{ fault.locality ? fault.locality + ', ' : '' }}{{ fault.county }}</td>
+                      <td data-label="Severitate"><span class="badge {{ fault.severity }}">{{ fault.severity | label }}</span></td>
+                      <td data-label="Clienți afectați">{{ fault.affectedCustomers === null ? '—' : (fault.affectedCustomers | number) }}</td>
+                      <td data-label="Stare">{{ fault.restoredAt ? 'Restabilită' : 'În desfășurare' }}</td>
+                      <td>
+                        <button class="secondary small" type="button" [disabled]="downloading()" (click)="download(fault)">
+                          Descarcă @if (fault.sizeBytes) { ({{ fault.sizeBytes | bytes }}) }
+                        </button>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+            <div class="row pager">
+              <button class="secondary small" type="button" [disabled]="found.page === 0" (click)="search(found.page - 1)">Înapoi</button>
+              <span class="muted">{{ found.total }} avarii</span>
+              <button class="secondary small" type="button" [disabled]="(found.page + 1) * found.size >= found.total" (click)="search(found.page + 1)">Înainte</button>
+            </div>
+          }
+        }
+      }
+    </div>
+  `,
+  styles: `
+    .segmented { justify-self: start; }
+    .filters label { flex: 1 1 150px; }
+    .pager { align-items: center; justify-content: space-between; }
+  `,
+})
+export class FaultsPage {
+  private readonly api = inject(ApiService);
+  protected readonly regions = REGIONS;
+  protected readonly severities = SEVERITIES;
+  protected readonly counties = countiesOf;
+  protected readonly tab = signal<'upload' | 'search'>('upload');
+
+  // ---- upload
+  protected draft = emptyUpload();
+  private file: File | undefined;
+  protected readonly sending = signal(false);
+  protected readonly error = signal<string | null>(null);
+  protected readonly stored = signal<StoredRef | null>(null);
+
+  // ---- search
+  protected filter: FaultFilter = { region: '', county: '', severity: '' };
+  protected fromDay = '';
+  protected toDay = '';
+  protected readonly results = new Loader<Page<Fault>>();
+  protected readonly downloading = signal(false);
+  protected readonly note = signal<{ ok: boolean; text: string } | null>(null);
+
+  protected pick(event: Event): void {
+    this.file = (event.target as HTMLInputElement).files?.[0];
+  }
+
+  protected async upload(): Promise<void> {
+    const { region, occurredAt } = this.draft;
+    if (!this.file || !region || !occurredAt) {
+      this.error.set('Completează câmpurile obligatorii și alege fișierul înregistrării.');
+      return;
+    }
+    this.sending.set(true);
+    this.error.set(null);
+    this.stored.set(null);
+    try {
+      const ref = await this.api.createFault({
+        region, county: this.draft.county, locality: this.draft.locality.trim(),
+        substationCode: this.draft.substationCode.trim(), occurredAt: localToIso(occurredAt)!,
+        restoredAt: localToIso(this.draft.restoredAt), severity: this.draft.severity,
+        cause: this.draft.cause.trim() || undefined, affectedCustomers: this.draft.affectedCustomers ?? undefined,
+        description: this.draft.description.trim() || undefined,
+      }, this.file);
+      this.stored.set(ref);
+      // Keep the area: during a storm several faults come from the same place.
+      this.draft = { ...emptyUpload(), region, county: this.draft.county };
+    } catch (error) {
+      this.error.set(problemMessage(error));
+    } finally {
+      this.sending.set(false);
+    }
+  }
+
+  protected openSearch(): void {
+    this.tab.set('search');
+    if (!this.results.data()) this.search(0);
+  }
+
+  protected search(page: number): void {
+    this.note.set(null);
+    const filter = { ...this.filter, from: dayToIso(this.fromDay), to: dayToIso(this.toDay, 1), page, size: 20 };
+    void this.results.run(() => this.api.faults(filter));
+  }
+
+  protected async download(fault: Fault): Promise<void> {
+    this.downloading.set(true);
+    this.note.set(await downloadAndSave(() => this.api.downloadFault(fault.id)));
+    this.downloading.set(false);
+  }
+}
