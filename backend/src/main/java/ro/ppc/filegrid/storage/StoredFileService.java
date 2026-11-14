@@ -103,15 +103,28 @@ public class StoredFileService {
         boolean uploaded = false;
         try {
             Written written = spool(spool, writer, key, id, policy.maxSizeBytes());
-            files.insertUploading(id, spec.region(), spec.category(), policy.backend(), address.location(),
-                    spec.originalFilename(), spec.contentType(), key, spec.uploadedBy(), traceIds.current());
+            Map<String, String> fileTags = Map.of("filegrid.file_id", id.toString(),
+                    "filegrid.category", spec.category().name());
+            traceIds.inSpan("db record file", fileTags, () -> {
+                files.insertUploading(id, spec.region(), spec.category(), policy.backend(), address.location(),
+                        spec.originalFilename(), spec.contentType(), key, spec.uploadedBy(), traceIds.current());
+                return null;
+            });
             recorded = true;
-            timedRun(spec.category(), policy.backend(), "put",
-                    () -> store.put(address, spool, written.storedSize()));
+            timedRun(spec.category(), policy.backend(), "put", () -> {
+                // The storage call itself: which file, where, how big.
+                traceIds.tag("filegrid.file_id", id.toString());
+                traceIds.tag("filegrid.location", address.location() == null ? "postgresql:stored_file_blob" : address.location());
+                traceIds.tag("filegrid.bytes", Long.toString(written.storedSize()));
+                store.put(address, spool, written.storedSize());
+            });
             uploaded = true;
-            tx.executeWithoutResult(status -> {
-                files.markStored(id, written.plainSize(), written.plainSha256(), written.storedSha256());
-                inSameTransaction.accept(files.find(id).orElseThrow());
+            traceIds.inSpan("db confirm file", fileTags, () -> {
+                tx.executeWithoutResult(status -> {
+                    files.markStored(id, written.plainSize(), written.plainSha256(), written.storedSha256());
+                    inSameTransaction.accept(files.find(id).orElseThrow());
+                });
+                return null;
             });
             return files.find(id).orElseThrow();
         } catch (RuntimeException e) {
@@ -342,5 +355,10 @@ public class StoredFileService {
         long count() {
             return count;
         }
+    }
+
+    /** Trace id of the request that stored the file, if it was traced. */
+    public java.util.Optional<String> traceId(java.util.UUID fileId) {
+        return files.traceId(fileId);
     }
 }

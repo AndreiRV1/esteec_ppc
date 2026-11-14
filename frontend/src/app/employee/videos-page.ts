@@ -7,6 +7,7 @@ import { BytesPipe, LabelPipe, countiesOf, dayToIso, formatBytes, localToIso } f
 import { DroneVideo, Page, REGIONS, Region, StoredRef, VideoFilter } from '../core/models';
 import { sha256OfBlob } from '../core/sha256';
 import { Status } from '../ui/status';
+import { OperationId } from '../ui/operation-id';
 
 /**
  * What is needed to continue an upload after a reload. Kept in localStorage:
@@ -39,7 +40,7 @@ type Phase = 'idle' | 'hashing' | 'uploading' | 'pausing' | 'paused' | 'finishin
 
 /** Drone videos: resumable upload in parts, and search/download of earlier videos. */
 @Component({
-  imports: [FormsModule, DatePipe, PercentPipe, LabelPipe, BytesPipe, Status],
+  imports: [FormsModule, DatePipe, PercentPipe, LabelPipe, BytesPipe, Status, OperationId],
   template: `
     <div class="page">
       <div class="intro">
@@ -114,6 +115,7 @@ type Phase = 'idle' | 'hashing' | 'uploading' | 'pausing' | 'paused' | 'finishin
             <div class="notice success" role="status">
               <p><strong>Video-ul a fost stocat.</strong> {{ checksumMatches() ? 'Amprenta de pe server corespunde cu cea calculată local.' : '' }}</p>
               <p>SHA-256: <span class="data">{{ ref.sha256 }}</span></p>
+              <fg-operation />
             </div>
           }
 

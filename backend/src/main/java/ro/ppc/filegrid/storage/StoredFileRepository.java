@@ -100,6 +100,12 @@ public class StoredFileRepository {
                 .update() == 1;
     }
 
+    /** W3C trace id of the request that stored the file (to follow it in Tempo). */
+    public Optional<String> traceId(UUID id) {
+        return jdbc.sql("SELECT trace_id FROM stored_file WHERE id = :id AND trace_id IS NOT NULL")
+                .param("id", id).query(String.class).optional();
+    }
+
     public Optional<StoredFile> find(UUID id) {
         return jdbc.sql("SELECT * FROM stored_file WHERE id = :id")
                 .param("id", id)

@@ -168,7 +168,8 @@ public class ConnectionRequestService {
         return new AdminRequestDetail(RequestSummary.of(row), row.submittedBy(), row.reviewedBy(),
                 form.applicant(), form.consumptionPlace(), form.permit(), repository.documents(clientId),
                 new ArchiveInfo(archive.id(), archive.backend(), archive.sizeBytes(), archive.sha256(),
-                        archive.encryption(), archive.storedAt(), Instant.now()),
+                        archive.encryption(), archive.storedAt(), Instant.now(),
+                        storedFiles.traceId(archive.id()).orElse(null)),
                 others);
     }
 

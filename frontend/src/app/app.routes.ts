@@ -9,14 +9,14 @@ export const routes: Routes = [
   {
     path: 'client',
     canActivate: [roleGuard],
-    data: { roles: ['client', 'admin'] },
+    data: { roles: ['client'] },
     loadComponent: () => import('./client/client-page').then((m) => m.ClientPage),
   },
   {
-    // Employees and admins file requests for applicants; clients can file their own.
+    // Employees file requests for applicants; clients can file their own.
     path: 'connection-requests/new',
     canActivate: [roleGuard],
-    data: { roles: ['employee', 'client', 'admin'] },
+    data: { roles: ['employee', 'client'] },
     loadComponent: () => import('./employee/connection-form-page').then((m) => m.ConnectionFormPage),
   },
   {
@@ -60,6 +60,10 @@ export const routes: Routes = [
   { path: 'angajat/avarii', redirectTo: '/employee/fault-records', pathMatch: 'full' },
   { path: 'angajat/video', redirectTo: '/employee/drone-videos', pathMatch: 'full' },
   { path: 'fara-acces', redirectTo: '/no-access', pathMatch: 'full' },
+  // Legal pages: public, so they can be read before creating an account.
+  { path: 'privacy', data: { doc: 'privacy' }, loadComponent: () => import('./ui/legal-page').then((m) => m.LegalPage) },
+  { path: 'terms', data: { doc: 'terms' }, loadComponent: () => import('./ui/legal-page').then((m) => m.LegalPage) },
+  { path: 'cookies', data: { doc: 'cookies' }, loadComponent: () => import('./ui/legal-page').then((m) => m.LegalPage) },
   { path: 'no-access', loadComponent: () => import('./ui/no-access-page').then((m) => m.NoAccessPage) },
   { path: '**', redirectTo: '' },
 ];

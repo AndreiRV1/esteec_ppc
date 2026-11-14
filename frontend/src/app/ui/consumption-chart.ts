@@ -5,7 +5,7 @@ import {
 import { Bucket, ConsumptionPoint } from '../core/models';
 
 const HEIGHT = 240;
-const MARGIN = { top: 14, right: 8, bottom: 26, left: 46 };
+const MARGIN = { top: 30, right: 8, bottom: 26, left: 46 };
 
 const number = (value: number, digits = 2) => value.toLocaleString('ro-RO', { maximumFractionDigits: digits });
 
@@ -36,7 +36,7 @@ function niceStep(max: number): number {
           role="img" tabindex="0" [attr.aria-label]="description()"
           (pointermove)="onPointer($event)" (pointerdown)="onPointer($event)" (pointerleave)="active.set(null)"
           (keydown)="onKey($event)" (blur)="active.set(null)">
-          <text class="axis" x="0" y="10">kWh</text>
+          <text class="axis" x="0" y="12">kWh</text>
           @for (tick of geometry().ticks; track tick.value) {
             <line class="grid" [attr.x1]="margin.left" [attr.x2]="width() - margin.right" [attr.y1]="tick.y" [attr.y2]="tick.y" />
             <text class="axis" text-anchor="end" [attr.x]="margin.left - 8" [attr.y]="tick.y + 4">{{ tick.text }}</text>

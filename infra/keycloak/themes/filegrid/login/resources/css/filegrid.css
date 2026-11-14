@@ -62,7 +62,15 @@ body { font-family: 'Barlow', system-ui, sans-serif; -webkit-font-smoothing: ant
   .pf-v5-c-login__main-body, .pf-v5-c-login__main-footer { padding-inline: 20px; }
 }
 .pf-v5-c-form { gap: 20px; }
-.pf-v5-c-login__main-footer-band { background: #f8fafc; border-top: 1px solid var(--fg-line); border-radius: 0 0 14px 14px; }
+/* "No account?" band: full card width at the bottom (the parent insets it and clips its padding). */
+/* The band also carries pf-v5-c-form and pf-v5-u-w-100 (an !important width), hence the id and !important. */
+.pf-v5-c-login__main { overflow: hidden; }
+.pf-v5-c-login__main-footer { padding: 0 !important; margin: 0 !important; }
+#kc-info {
+  display: block; width: auto !important; max-width: none; margin: 24px 0 0 !important; padding: 18px 32px !important;
+  background: #f8fafc; border-top: 1px solid var(--fg-line); text-align: center;
+}
+#kc-info-wrapper { margin: 0; padding: 0; }
 
 /* Fields: one outline per box. A password field is an input plus the show/hide button, so the
    outline and focus ring go on the group that holds both, never on the parts. */

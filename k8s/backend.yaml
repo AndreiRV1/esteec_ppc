@@ -25,6 +25,8 @@ data:
   FTP_USER: "filegrid"
   FILEGRID_OIDC_ISSUER: "https://localhost:8443/auth/realms/filegrid"
   FILEGRID_OIDC_JWKS_URI: "http://keycloak:8080/auth/realms/filegrid/protocol/openid-connect/certs"
+  FILEGRID_KEYCLOAK_URL: "http://keycloak:8080/auth"
+  FILEGRID_ALERTMANAGER_URL: "http://alertmanager:9093"
   LOGGING_STRUCTURED_FORMAT_CONSOLE: "ecs"
   FILEGRID_TRACE_EXPORT: "true"
   FILEGRID_OTLP_TRACES_ENDPOINT: "http://tempo:4318/v1/traces"
@@ -518,6 +520,12 @@ spec:
                 secretKeyRef:
                   name: filegrid-secrets
                   key: FILEGRID_METER_API_KEY
+            # Registration (POST /api/v1/public/...) creates applicant logins in Keycloak.
+            - name: FILEGRID_KEYCLOAK_BACKEND_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: filegrid-secrets
+                  key: FILEGRID_KEYCLOAK_BACKEND_SECRET
           resources:
             requests:
               cpu: 250m

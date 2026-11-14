@@ -4,7 +4,7 @@ import { firstValueFrom, from, switchMap } from 'rxjs';
 import { AuthService } from './auth';
 import {
   AdminRequestDetail, Bucket, ConnectionFiles, ConnectionRequestForm, Consumption, ConsumptionSummary, Decision,
-  DroneVideo, Fault, FaultFilter, FaultMetadata, FileCategory, Me, Page, Problem, Region, RequestFilter,
+  DroneVideo, Fault, FaultFilter, FiringAlert, FaultMetadata, FileCategory, Me, Page, Problem, Region, RequestFilter,
   Registration, RequestSummary, StoragePolicy, StoragePolicyUpdate, StoredRef, SystemStatistics, UploadSession, UploadStatus,
   VideoFilter, VideoUploadInit,
 } from './models';
@@ -69,6 +69,7 @@ export class ApiService {
   updateStoragePolicy = (category: FileCategory, region: Region, body: StoragePolicyUpdate) =>
     firstValueFrom(this.http.put<StoragePolicy | null>(`${BASE}/admin/storage-policies/${category}/${region}`, body));
   statistics = () => this.get<SystemStatistics>('/admin/statistics');
+  alerts = () => this.get<FiringAlert[]>('/admin/alerts');
 
   // ---- fault records ---------------------------------------------------------
   createFault(metadata: FaultMetadata, file: File): Promise<StoredRef> {
@@ -79,6 +80,8 @@ export class ApiService {
   }
   faults = (filter: FaultFilter) => this.get<Page<Fault>>('/fault-records', { ...filter });
   downloadFault = (id: string) => this.download(`/fault-records/${id}/file`);
+  /** Marks a fault as restored now. */
+  restoreFault = (id: string) => firstValueFrom(this.http.post<Fault>(`${BASE}/fault-records/${id}/restore`, {}));
 
   // ---- drone videos ----------------------------------------------------------
   startVideoUpload = (body: VideoUploadInit) =>
@@ -202,6 +205,11 @@ const MESSAGES: Record<string, string> = {
 /** A message a person can act on, in Romanian, for any failed call. */
 export function problemMessage(error: unknown): string {
   const problem = toProblem(error);
+  const text = problemText(problem);
+  return problem.traceId ? `${text} (ID operație: ${problem.traceId})` : text;
+}
+
+function problemText(problem: Problem): string {
   const known = problem.code ? MESSAGES[problem.code] : undefined;
   if (known) return known;
   if (problem.status === 0) return 'Nu am putut contacta serverul. Verifică conexiunea și încearcă din nou.';

@@ -1,0 +1,16 @@
+{
+  "faultRecord": "SPECIMEN - date fictive pentru demonstrarea FileGrid",
+  "region": "MUNTENIA",
+  "county": "Ilfov",
+  "locality": "Voluntari",
+  "substationCode": "ST-MUN-VOLUNTARI-110",
+  "occurredAt": "2026-11-14T15:30:00Z",
+  "severity": "HIGH",
+  "cause": "Cablu subteran deteriorat",
+  "affectedCustomers": 1240,
+  "description": "Declanșare protecție pe fiderul 20 kV Voluntari Nord. Echipă trimisă la fața locului.",
+  "samples": [
+    { "at": "2026-11-14T15:29:58Z", "voltageKv": 20.1, "currentA": 312 },
+    { "at": "2026-11-14T15:30:00Z", "voltageKv": 0.0, "currentA": 0 }
+  ]
+}

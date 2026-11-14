@@ -5,6 +5,7 @@ import { ApiService, Loader, downloadAndSave, problemMessage } from '../core/api
 import { BytesPipe, LabelPipe, countiesOf, dayToIso, localToIso } from '../core/format';
 import { Fault, FaultFilter, Page, REGIONS, Region, SEVERITIES, Severity, StoredRef } from '../core/models';
 import { Status } from '../ui/status';
+import { OperationId } from '../ui/operation-id';
 
 const emptyUpload = () => ({
   region: '' as Region | '', county: '', locality: '', substationCode: '', occurredAt: '', restoredAt: '',
@@ -13,7 +14,7 @@ const emptyUpload = () => ({
 
 /** Fault records: upload one (metadata + file), or search and download earlier ones. */
 @Component({
-  imports: [FormsModule, DatePipe, DecimalPipe, LabelPipe, BytesPipe, Status],
+  imports: [FormsModule, DatePipe, DecimalPipe, LabelPipe, BytesPipe, Status, OperationId],
   template: `
     <div class="page">
       <div class="intro">
@@ -68,6 +69,7 @@ const emptyUpload = () => ({
             <div class="notice success" role="status">
               <p><strong>Înregistrarea a fost încărcată</strong> și este disponibilă pentru dispecerat.</p>
               <p>SHA-256: <span class="data">{{ ref.sha256 }}</span></p>
+              <fg-operation />
             </div>
           }
           <div class="row"><button type="submit" [disabled]="sending()">{{ sending() ? 'Se încarcă…' : 'Încarcă înregistrarea' }}</button></div>
@@ -115,7 +117,15 @@ const emptyUpload = () => ({
                       <td data-label="Zonă">{{ fault.locality ? fault.locality + ', ' : '' }}{{ fault.county }}</td>
                       <td data-label="Severitate"><span class="severity {{ fault.severity }}">{{ fault.severity | label }}</span></td>
                       <td data-label="Clienți afectați">{{ fault.affectedCustomers === null ? '—' : (fault.affectedCustomers | number) }}</td>
-                      <td data-label="Stare">{{ fault.restoredAt ? 'Restabilită' : 'În desfășurare' }}</td>
+                      <td data-label="Stare">
+                        @if (fault.restoredAt) {
+                          Restabilită {{ fault.restoredAt | date: 'd MMM, HH:mm' }}
+                        } @else {
+                          <button class="small" type="button" [disabled]="resolving() === fault.id" (click)="resolve(fault)">
+                            Marchează rezolvată
+                          </button>
+                        }
+                      </td>
                       <td>
                         <button class="secondary small" type="button" [disabled]="downloading()" (click)="download(fault)">
                           Descarcă @if (fault.file?.sizeBytes ?? fault.sizeBytes; as size) { ({{ size | bytes }}) }
@@ -164,6 +174,21 @@ export class FaultsPage {
   protected readonly results = new Loader<Page<Fault>>();
   protected readonly downloading = signal(false);
   protected readonly note = signal<{ ok: boolean; text: string } | null>(null);
+  protected readonly resolving = signal<string | null>(null);
+
+  /** Power is back: the fault stops showing as active for the customers in that area. */
+  protected async resolve(fault: Fault): Promise<void> {
+    this.resolving.set(fault.id);
+    try {
+      await this.api.restoreFault(fault.id);
+      this.note.set({ ok: true, text: `Avaria de la ${fault.substationCode} a fost marcată ca rezolvată.` });
+      this.search(this.results.data()?.page ?? 0);
+    } catch (error) {
+      this.note.set({ ok: false, text: problemMessage(error) });
+    } finally {
+      this.resolving.set(null);
+    }
+  }
 
   protected async pick(event: Event): Promise<void> {
     this.file = (event.target as HTMLInputElement).files?.[0];

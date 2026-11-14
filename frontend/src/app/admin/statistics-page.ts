@@ -1,5 +1,5 @@
-import { DatePipe, DecimalPipe } from '@angular/common';
-import { Component, computed, inject, signal } from '@angular/core';
+import { DecimalPipe } from '@angular/common';
+import { Component, inject, signal } from '@angular/core';
 import { ApiService, Loader } from '../core/api';
 import { LabelPipe } from '../core/format';
 import { CategoryStorageFit, DayCategoryMetrics, RegionalGridInsight, SystemStatistics } from '../core/models';
@@ -14,16 +14,12 @@ type SectionTab = 'storage' | 'peak' | 'grid';
  *   3. Ce spun datele însele despre rețea (anomalii contoare, zonele cu cele mai multe avarii)?
  */
 @Component({
-  imports: [DatePipe, DecimalPipe, LabelPipe, Status],
+  imports: [DecimalPipe, LabelPipe, Status],
   template: `
     <div class="page">
       <div class="page-head">
         <div class="intro">
-          <h1>Statistici și interpretarea datelor</h1>
-          <p class="muted">
-            Analiză tehnică și de business pentru alegerea sistemelor de stocare, comportamentul la vârf de furtună (10×)
-            și starea rețelei pe regiuni (Muntenia, Banat, Dobrogea).
-          </p>
+          <h1>Statistici</h1>
         </div>
         <button class="secondary small" type="button" [disabled]="stats.loading()" (click)="reload()">
           Actualizează datele
@@ -46,27 +42,12 @@ type SectionTab = 'storage' | 'peak' | 'grid';
 
       @if (stats.data(); as data) {
         @if (tab() === 'storage') {
-          <section class="intro" aria-labelledby="storage-intro">
-            <h2 id="storage-intro">De ce fiecare categorie are nevoie de un sistem de stocare diferit</h2>
-            <p>
-              Măsurătorile de mai jos compară cele trei sisteme (PostgreSQL, FTP, S3) pe aceleași patru categorii de
-              fișiere. Politica activă urmează recomandarea optimă și poate fi schimbată fără modificări de cod.
-            </p>
-          </section>
-
           @for (fit of data.storageFit; track fit.category) {
             <section class="card" [attr.aria-labelledby]="'cat-' + fit.category">
               <div class="page-head">
-                <div class="intro">
-                  <h2 [id]="'cat-' + fit.category">{{ fit.category | label }}</h2>
-                  <p>{{ fit.typicalSize }}. {{ fit.businessGuarantee }}</p>
-                </div>
+                <h2 [id]="'cat-' + fit.category">{{ fit.category | label }}</h2>
                 <span class="badge ACCEPTED">Recomandat: {{ fit.recommendedBackend | label }}</span>
               </div>
-
-              <p class="decision-box">
-                <strong>Interpretare și decizie:</strong> {{ fit.whyRecommended }}
-              </p>
 
               <div class="table-wrap">
                 <table class="stack">
@@ -78,8 +59,6 @@ type SectionTab = 'storage' | 'peak' | 'grid';
                       <th>p99 (ms)</th>
                       <th>Throughput</th>
                       <th>Rată erori</th>
-                      <th>Memorie RAM</th>
-                      <th>Concluzie tehnică</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -88,7 +67,7 @@ type SectionTab = 'storage' | 'peak' | 'grid';
                         <td data-label="Storage testat">
                           <strong>{{ c.backend | label }}</strong>
                           @if (c.backend === fit.recommendedBackend) {
-                            <span class="badge LOW optimal">Optim</span>
+                            <span class="badge LOW">Optim</span>
                           }
                         </td>
                         <td data-label="p50 (ms)" class="data">{{ n(c.p50Ms, ' ms') }}</td>
@@ -96,8 +75,6 @@ type SectionTab = 'storage' | 'peak' | 'grid';
                         <td data-label="p99 (ms)" class="data">{{ n(c.p99Ms, ' ms') }}</td>
                         <td data-label="Throughput" class="data">{{ n(c.throughputMbps, ' MB/s') }}</td>
                         <td data-label="Rată erori" class="data">{{ n(c.errorRatePercent, '%', 2) }}</td>
-                        <td data-label="Memorie RAM" class="data">{{ n(c.memoryFootprintMb, ' MB', 0) }}</td>
-                        <td data-label="Concluzie tehnică">{{ c.verdict }}</td>
                       </tr>
                     }
                   </tbody>
@@ -108,34 +85,9 @@ type SectionTab = 'storage' | 'peak' | 'grid';
         }
 
         @if (tab() === 'peak') {
-          <div class="grid-3">
-            <div class="card kpi">
-              <h3 class="kpi-label">Izolare între categorii la furtună (10×)</h3>
-              <p class="kpi-value ok-text">100% SLA</p>
-              <p class="muted">
-                Un vârf de 10× pe avarii (FTP) nu degradează citirile de contoare (PostgreSQL) sau racordările (S3).
-              </p>
-            </div>
-            <div class="card kpi">
-              <h3 class="kpi-label">Procesare video > 1 GB în streaming</h3>
-              <p class="kpi-value data">≤ 32 MB RAM</p>
-              <p class="muted">
-                Încărcarea în părți de 8–16 MB păstrează memoria constantă indiferent dacă fișierul are 50 MB sau 1,4 GB.
-              </p>
-            </div>
-            <div class="card kpi">
-              <h3 class="kpi-label">Reziliență pe conexiuni degradate</h3>
-              <p class="kpi-value data">{{ totalResumed() | number }} mesaje retrimise oprite</p>
-              <p class="muted">
-                Mesajele retrimise de contoare (aceeași citire) sunt recunoscute și nu se numără de două ori.
-              </p>
-            </div>
-          </div>
-
           <section class="card" aria-labelledby="peak-table">
             <div class="page-head">
-              <h2 id="peak-table">Zi normală față de zi de vârf (furtună, volum 10×)</h2>
-              <span class="muted">Generat la {{ data.generatedAt | date: 'd MMM y, HH:mm' }}</span>
+              <h2 id="peak-table">Zi normală vs. zi de vârf</h2>
             </div>
 
             <div class="bars-grid">
@@ -210,14 +162,6 @@ type SectionTab = 'storage' | 'peak' | 'grid';
         }
 
         @if (tab() === 'grid') {
-          <section class="intro" aria-labelledby="grid-intro">
-            <h2 id="grid-intro">Ce spun datele colectate despre rețeaua electrică</h2>
-            <p>
-              Corelarea citirilor de contoare inteligente cu înregistrările de avarie și inspecțiile video cu drona
-              evidențiază zonele vulnerabile, abaterile de tensiune și prioritățile de mentenanță pe fiecare regiune.
-            </p>
-          </section>
-
           <div class="grid-3">
             @for (reg of data.regionalInsights; track reg.region) {
               <section class="card region-card" [attr.aria-labelledby]="'reg-' + reg.region">
@@ -236,9 +180,9 @@ type SectionTab = 'storage' | 'peak' | 'grid';
                   <dt>Citiri (24h)</dt>
                   <dd class="data">{{ reg.readings24h | number }}</dd>
                   <dt>Anomalii detectate</dt>
-                  <dd class="data warn-text">{{ reg.anomalies24h | number }} (tensiune / vârf consum)</dd>
+                  <dd class="data warn-text">{{ reg.anomalies24h | number }}</dd>
                   <dt>Mesaje respinse</dt>
-                  <dd class="data">{{ reg.duplicatesFiltered24h | number }} (validare)</dd>
+                  <dd class="data">{{ reg.duplicatesFiltered24h | number }}</dd>
                   <dt>Tensiune medie</dt>
                   <dd class="data">{{ n(reg.avgVoltageV, ' V') }}</dd>
                   <dt>Vârf de sarcină</dt>
@@ -254,10 +198,6 @@ type SectionTab = 'storage' | 'peak' | 'grid';
                   <dt>Inspecții dronă</dt>
                   <dd class="data">{{ reg.droneVideosStored }} video-uri</dd>
                 </dl>
-
-                <p class="decision-box">
-                  <strong>Recomandare de business:</strong> {{ reg.recommendation }}
-                </p>
               </section>
             }
           </div>
@@ -267,17 +207,10 @@ type SectionTab = 'storage' | 'peak' | 'grid';
   `,
   styles: `
     .segmented { justify-self: start; max-width: 100%; overflow-x: auto; }
+    h2, th, .segmented button { white-space: nowrap; }
+    h2 { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
     .grid-3 { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
-    .kpi { gap: 6px; }
-    .kpi-label { font-size: 1rem; font-weight: 600; color: var(--ink-muted); }
-    .optimal { margin-left: 8px; }
-    .kpi-value { font: 600 1.9rem/1.1 var(--font-body); letter-spacing: -0.02em; }
-    .ok-text { color: var(--ok); }
     .warn-text { color: var(--warn-ink); font-weight: 600; }
-    .decision-box {
-      padding: 14px 16px; border-radius: var(--radius);
-      background: var(--primary-tint); color: #183a73;
-    }
     .recommended-row, .recommended-row:hover { background: var(--primary-tint); }
     .bars-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
     .bar-card { background: var(--surface); border-radius: var(--radius); padding: 16px; display: grid; gap: 10px; }
@@ -296,9 +229,6 @@ export class StatisticsPage {
   protected readonly tab = signal<SectionTab>('storage');
   protected readonly stats = new Loader<SystemStatistics>();
 
-  protected readonly totalResumed = computed(() =>
-    (this.stats.data()?.normalVsPeak ?? []).reduce((sum, r) => sum + (r.resumedOrRetried ?? 0), 0),
-  );
 
   constructor() {
     this.reload();

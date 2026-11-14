@@ -8,6 +8,7 @@ import { authInterceptor } from './core/api';
 import { AuthService } from './core/auth';
 import { APP_CONFIG, AppConfig } from './core/config';
 import { mockBackendInterceptor } from './core/mock-backend';
+import { traceInterceptor } from './core/operations';
 
 registerLocaleData(localeRo);
 
@@ -17,7 +18,7 @@ export function appConfig(config: AppConfig, auth: AuthService): ApplicationConf
     providers: [
       provideBrowserGlobalErrorListeners(),
       provideRouter(routes, withComponentInputBinding()),
-      provideHttpClient(withInterceptors([authInterceptor, mockBackendInterceptor])),
+      provideHttpClient(withInterceptors([authInterceptor, traceInterceptor, mockBackendInterceptor])),
       { provide: APP_CONFIG, useValue: config },
       { provide: AuthService, useValue: auth },
       { provide: LOCALE_ID, useValue: 'ro' },

@@ -20,12 +20,12 @@ SIM_IMAGE := filegrid/meter-simulator:local
 # Extra simulator flags, shared by `seed` and `sim` so both use the same fleet.
 SIM_ARGS  ?=
 # Fleet size for `seed`, `sim` and the always-on simulator service; all three must agree.
-export SIMULATOR_METERS_COUNT ?= 300
+export SIMULATOR_METERS_COUNT ?= 2000
 # `make up SIMULATOR=0` starts the stack without simulated meter traffic.
 SIMULATOR ?= 1
 
 .DEFAULT_GOAL := help
-.PHONY: help env up dev down ps logs psql migrate test demo clean \
+.PHONY: help env up dev down ps logs psql migrate test demo demo-setup clean \
 	gen-data gen-storm gen-large-video seed-data verify-data data-status sim-build seed seed-clients sim
 
 help: ## Show this help
@@ -78,6 +78,9 @@ migrate: ## Re-run Flyway migrations
 
 test: ## Run backend unit + integration tests (Testcontainers, in Docker)
 	$(MAVEN) verify
+
+demo-setup: $(ENV_FILE) ## Prepare the running stack for the showcase in docs/demo.md (data + logins)
+	FILEGRID_ENV_FILE=$(ENV_FILE) ./scripts/demo-setup.sh
 
 demo: ## Walk through a racordare end to end against the running stack (needs `make up`)
 	FILEGRID_ENV_FILE=$(ENV_FILE) ./scripts/demo-racordare.sh

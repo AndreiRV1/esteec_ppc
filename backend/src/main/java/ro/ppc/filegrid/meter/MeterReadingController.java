@@ -91,10 +91,14 @@ public class MeterReadingController {
         }
 
         boolean stored;
+        Instant start = periodStart, end = periodEnd; // effectively final, for the span below
         Timer.Sample sample = Timer.start(metrics);
         try {
-            stored = repository.insertRaw(region.name(), meterId, readingId, periodStart, periodEnd, body,
-                    sha256(body), traceIds.current());
+            stored = traceIds.inSpan("storage put", java.util.Map.of("filegrid.category", "METER_READING",
+                            "filegrid.backend", "DATABASE", "filegrid.location", "postgresql:meter_reading_raw",
+                            "filegrid.meter_id", meterId),
+                    () -> repository.insertRaw(region.name(), meterId, readingId, start, end, body,
+                            sha256(body), traceIds.current()));
             record(sample, "success");
         } catch (DataIntegrityViolationException e) {
             record(sample, "success"); // the database answered; the reading itself is invalid

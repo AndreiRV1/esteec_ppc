@@ -81,6 +81,9 @@ springdoc:
 
 filegrid:
   identity-pepper: ${FILEGRID_IDENTITY_PEPPER}
+  # Read-only: firing alerts for the admin page (blank = not configured).
+  alertmanager:
+    url: ${FILEGRID_ALERTMANAGER_URL:}
   keycloak:
     # Admin API for creating applicant logins (registration). Blank secret = registration off.
     url: ${FILEGRID_KEYCLOAK_URL:http://localhost:${KEYCLOAK_HOST_PORT:8180}/auth}

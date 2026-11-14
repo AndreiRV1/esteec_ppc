@@ -1,0 +1,22 @@
+{{/* E-mail to the on-call team: which business requirement (spec table 2.1) is at risk, and why. */}}
+{{ define "filegrid.subject" -}}
+[FileGrid] {{ if eq .Status "firing" }}Cerință în pericol{{ else }}Rezolvat{{ end }}: {{ .CommonLabels.requirement | reReplaceAll ":.*" "" }} – {{ .CommonLabels.alertname }}
+{{- end }}
+
+{{ define "filegrid.html" -}}
+<div style="font-family: Arial, sans-serif; color: #1b2836; max-width: 640px">
+  <h2 style="margin: 0 0 8px">{{ if eq .Status "firing" }}⚠ Cerință de business în pericol{{ else }}✓ Situație rezolvată{{ end }}</h2>
+  {{ range .Alerts }}
+  <div style="border: 1px solid #c9d2dc; border-left: 4px solid {{ if eq .Labels.severity "critical" }}#d64541{{ else }}#f2b31c{{ end }}; border-radius: 6px; padding: 12px 16px; margin: 12px 0">
+    <p style="margin: 0 0 6px"><strong>Cerința (tabelul 2.1):</strong> {{ .Labels.requirement }}</p>
+    <p style="margin: 0 0 6px"><strong>{{ .Annotations.summary }}</strong></p>
+    <p style="margin: 0 0 6px">{{ .Annotations.description }}</p>
+    <p style="margin: 0; color: #5b6878; font-size: 13px">
+      {{ .Labels.alertname }} · {{ .Labels.severity }}{{ if .Labels.category }} · {{ .Labels.category }}{{ end }}{{ if .Labels.backend }} · {{ .Labels.backend }}{{ end }}
+      · din {{ .StartsAt.Format "02.01.2006 15:04 MST" }}{{ if eq .Status "resolved" }} · rezolvat {{ .EndsAt.Format "02.01.2006 15:04 MST" }}{{ end }}
+    </p>
+  </div>
+  {{ end }}
+  <p style="color: #5b6878; font-size: 13px">Panouri: Monitorizare în aplicația FileGrid (Grafana). Alerte active: pagina Monitorizare → Alerte.</p>
+</div>
+{{- end }}
