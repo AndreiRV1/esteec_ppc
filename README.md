@@ -35,7 +35,8 @@ make demo-corruption # optional: a file corrupted on storage is detected and nev
 Measured results of these and the Kubernetes run: [`docs/evidence.md`](docs/evidence.md).
 
 **Showcase:** follow [`docs/demo.md`](docs/demo.md) (about 15 minutes, every feature). The specimen documents
-for a racordare are in `demo/documents/` (regenerate with `scripts/make-demo-documents.py`).
+for a racordare are in `demo/documents/`, fault reports in `demo/faults/`, a tagged drone clip in `demo/videos/`
+(regenerate all with `make demo-files`). Forms fill themselves from these files: PDF text, OCR of scans, MP4 metadata.
 
 In `make up` mode, **only the TLS proxy port (`127.0.0.1:8443`) is published to the host**. Accept Caddy's local CA certificate once in the browser (or pass `--cacert` extracted from `proxy:/data/caddy/pki/authorities/local/root.crt`).
 
@@ -102,20 +103,16 @@ infra/keycloak/realm/     Keycloak realm import (roles, OIDC clients, seeded use
 infra/minio/              idempotent S3 bucket bootstrap and IAM policy
 infra/vsftpd/             hardened Alpine + vsftpd container image
 k8s/                      Kustomize manifests (category-split deployments, HPAs, NetworkPolicies, Ingress)
-scripts/                  gen-env.sh, demo-racordare.sh, seed-clients.py
+scripts/                  gen-env.sh, demo-*.sh acts, make-demo-documents.py / make-demo-video.sh, seed-clients.py
+demo/                     committed demo files: specimen PDFs (+ scanned copies for OCR), fault reports, tagged MP4
 docs/                     API contract (api.md), platform & observability (platform.md), racordare (racordare.md)
 ```
 
 ## Further documentation
 
+- [`docs/project.md`](docs/project.md) — the whole project in one place: architecture, every component, how each demo step is implemented, known limits.
+- [`docs/demo.md`](docs/demo.md) — the showcase script, with the data to generate and a spec coverage table.
 - [`docs/api.md`](docs/api.md) — REST API contract, endpoints, error codes, and storage-policy rules.
 - [`docs/platform.md`](docs/platform.md) — reverse proxy routing, OIDC issuer, Grafana SSO, dashboards, alerts, and compose scaling.
 - [`docs/racordare.md`](docs/racordare.md) & [`docs/connection-documents.md`](docs/connection-documents.md) — connection request workflow and envelope encryption design.
 - [`k8s/README.md`](k8s/README.md) — Kubernetes deployment, secret creation, static validation, and scaling/resilience proof.
-
-
-ID client
-    cl-04666393
-Parolă
-    NtFJY5jTu62ApGBp
-

@@ -26,7 +26,7 @@ SIMULATOR ?= 1
 
 .DEFAULT_GOAL := help
 .PHONY: help env up dev down ps logs psql migrate test demo demo-setup clean seed-if-empty \
-	demo-corruption demo-degraded demo-storm demo-security \
+	demo-corruption demo-degraded demo-storm demo-security demo-files \
 	gen-data gen-storm gen-large-video seed-data verify-data data-status sim-build seed seed-clients sim
 
 help: ## Show this help
@@ -83,6 +83,10 @@ test: ## Run backend unit + integration tests (Testcontainers, in Docker)
 
 demo-setup: $(ENV_FILE) ## Prepare the running stack for the showcase in docs/demo.md (data + logins)
 	FILEGRID_ENV_FILE=$(ENV_FILE) ./scripts/demo-setup.sh
+
+demo-files: ## Regenerate the demo PDFs (incl. scanned copies for OCR) and demo video (needs chromium, pdftoppm, Pillow, Docker)
+	python3 scripts/make-demo-documents.py
+	./scripts/make-demo-video.sh
 
 demo: ## Walk through a racordare end to end against the running stack (needs `make up`)
 	FILEGRID_ENV_FILE=$(ENV_FILE) ./scripts/demo-racordare.sh
