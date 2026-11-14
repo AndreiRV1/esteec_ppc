@@ -13,6 +13,9 @@ What is implemented so far:
   Clients submit their connection documents; FileGrid zips them, encrypts the zip
   and stores it; an admin reviews the request and accepts or rejects it.
   See [docs/racordare.md](docs/racordare.md).
+This repository currently contains the **storage layer**: PostgreSQL, MinIO (S3)
+and vsftpd (FTP), each in its own container, plus the database schema, and the
+**smart-meter simulator** ([`simulator/`](simulator/README.md)).
 
 ## Quick start
 
@@ -68,6 +71,12 @@ Other targets:
 - `make ps`, `make logs`, `make psql`, `make migrate`, `make down`.
 - `make env`: adds variables that are new in `.env.example` to your `.env`, without touching existing secrets.
 - `make clean`: **deletes all data volumes**.
+Meter simulator: `make seed` registers the simulated meters in the database,
+`make sim` starts sending readings to FileGrid on `localhost:8080`. See
+[`simulator/README.md`](simulator/README.md) for rate, anomalies and runtime control.
+
+Other targets: `make ps`, `make logs`, `make psql`, `make migrate`, `make down`,
+`make clean` (**deletes all data volumes**).
 
 ## Layout
 
@@ -83,6 +92,9 @@ infra/minio/              bucket bootstrap script + app IAM policy
 infra/vsftpd/             FTP server image (Alpine + vsftpd)
 scripts/                  env generation, end-to-end demo
 docs/                     racordare flow, connection documents research
+docs/                     design notes (connection documents research)
+simulator/                smart-meter simulator (Spring Boot)
+db/seed/                  generated meter registry (`make seed`, git-ignored)
 ```
 
 ## Storage decisions
