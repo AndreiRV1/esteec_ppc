@@ -18,18 +18,19 @@ function runGuard(userRoles: Role[], routeRoles: Role[]): boolean | string {
 }
 
 describe('roleGuard', () => {
-  it('lets a user into a route that lists one of their roles', () => {
+  it('lets a user into a route that lists one of their roles, and lets admin into all routes', () => {
     expect(runGuard(['admin'], ['admin'])).toBe(true);
+    expect(runGuard(['admin'], ['employee'])).toBe(true);
+    expect(runGuard(['admin'], ['client'])).toBe(true);
     expect(runGuard(['client'], ['employee', 'client'])).toBe(true);
   });
 
   it('sends a user without the role to their own area', () => {
     expect(runGuard(['client'], ['admin'])).toBe('/client');
-    expect(runGuard(['employee'], ['admin'])).toBe('/angajat/avarii');
-    expect(runGuard(['admin'], ['client'])).toBe('/admin/cereri');
+    expect(runGuard(['employee'], ['admin'])).toBe('/employee/fault-records');
   });
 
   it('sends an account with no FileGrid role to the no-access page', () => {
-    expect(runGuard([], ['client'])).toBe('/fara-acces');
+    expect(runGuard([], ['client'])).toBe('/no-access');
   });
 });

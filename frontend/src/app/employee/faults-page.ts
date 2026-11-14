@@ -57,6 +57,9 @@ const emptyUpload = () => ({
             </div>
             <label>Descriere <textarea name="description" [(ngModel)]="draft.description" maxlength="2000"></textarea></label>
           </fieldset>
+          @if (autoFilledNote(); as info) {
+            <p class="notice" role="status">{{ info }}</p>
+          }
           @if (error(); as message) { <p class="notice error" role="alert">{{ message }}</p> }
           @if (stored(); as ref) {
             <div class="notice success" role="status">
@@ -99,11 +102,12 @@ const emptyUpload = () => ({
           } @else {
             <div class="table-wrap">
               <table class="stack">
-                <thead><tr><th>Moment</th><th>Stație</th><th>Zonă</th><th>Severitate</th><th>Clienți afectați</th><th>Stare</th><th>Fișier</th></tr></thead>
+                <thead><tr><th>Moment</th><th>Regiune</th><th>Stație</th><th>Zonă</th><th>Severitate</th><th>Clienți afectați</th><th>Stare</th><th>Fișier</th></tr></thead>
                 <tbody>
                   @for (fault of found.items; track fault.id) {
                     <tr>
                       <td data-label="Moment">{{ fault.occurredAt | date: 'd MMM y, HH:mm' }}</td>
+                      <td data-label="Regiune">{{ fault.region | label }}</td>
                       <td data-label="Stație" class="data">{{ fault.substationCode }}</td>
                       <td data-label="Zonă">{{ fault.locality ? fault.locality + ', ' : '' }}{{ fault.county }}</td>
                       <td data-label="Severitate"><span class="badge {{ fault.severity }}">{{ fault.severity | label }}</span></td>
@@ -148,6 +152,7 @@ export class FaultsPage {
   protected readonly sending = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly stored = signal<StoredRef | null>(null);
+  protected readonly autoFilledNote = signal<string | null>(null);
 
   // ---- search
   protected filter: FaultFilter = { region: '', county: '', severity: '' };
@@ -157,8 +162,46 @@ export class FaultsPage {
   protected readonly downloading = signal(false);
   protected readonly note = signal<{ ok: boolean; text: string } | null>(null);
 
-  protected pick(event: Event): void {
+  protected async pick(event: Event): Promise<void> {
     this.file = (event.target as HTMLInputElement).files?.[0];
+    this.autoFilledNote.set(null);
+    if (!this.file || (!this.file.name.endsWith('.json') && this.file.type !== 'application/json')) return;
+    try {
+      const parsed = JSON.parse(await this.file.text());
+      const rec = parsed?.fault_record ?? parsed;
+      const reg = (rec?.region ?? parsed?.region) as Region | undefined;
+      if (reg && this.regions.includes(reg)) {
+        const toLocalInput = (isoStr?: string | null) => {
+          if (!isoStr) return '';
+          const d = new Date(isoStr);
+          if (Number.isNaN(d.getTime())) return '';
+          const pad = (n: number) => String(n).padStart(2, '0');
+          return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        };
+        this.draft = {
+          region: reg,
+          county: rec.county ?? this.draft.county,
+          locality: rec.locality ?? this.draft.locality,
+          substationCode: rec.substation_code ?? rec.substationCode ?? this.draft.substationCode,
+          occurredAt: toLocalInput(rec.occurred_at ?? rec.occurredAt) || this.draft.occurredAt,
+          restoredAt: toLocalInput(rec.restored_at ?? rec.restoredAt),
+          severity: this.severities.includes(rec.severity) ? rec.severity : this.draft.severity,
+          cause: rec.cause ?? this.draft.cause,
+          affectedCustomers: rec.affected_customers ?? rec.affectedCustomers ?? this.draft.affectedCustomers,
+          description: rec.description ?? this.draft.description,
+        };
+        const samplesCount = parsed?.oscillogram_samples_count ?? parsed?.oscillogram_samples?.length;
+        const ied = parsed?.protection_relay?.ied_device;
+        this.autoFilledNote.set(
+          `Date preluate automat din fișierul JSON (${reg} · ${this.draft.substationCode}` +
+            (ied ? ` · releu ${ied}` : '') +
+            (samplesCount ? ` · ${Number(samplesCount).toLocaleString('ro-RO')} eșantioane oscilogramă` : '') +
+            ').',
+        );
+      }
+    } catch {
+      // Non-FileGrid JSON or binary file: user fills fields manually
+    }
   }
 
   protected async upload(): Promise<void> {

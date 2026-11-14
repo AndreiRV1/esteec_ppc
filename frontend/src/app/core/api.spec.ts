@@ -97,6 +97,13 @@ describe('ApiService', () => {
     call.flush(null);
   });
 
+  it('fetches system statistics from /api/v1/admin/statistics', async () => {
+    const res = api.statistics();
+    const call = await expectOne('GET', '/api/v1/admin/statistics');
+    call.flush({ generatedAt: '2026-11-14T12:00:00Z', storageFit: [], normalVsPeak: [], regionalInsights: [] });
+    expect((await res).generatedAt).toBe('2026-11-14T12:00:00Z');
+  });
+
   it('uploads a fault record as multipart with "metadata" and "file"', async () => {
     void api.createFault(
       { region: 'BANAT', county: 'Timiș', locality: 'Lugoj', substationCode: 'ST-1', occurredAt: '2026-11-01T10:00:00.000Z', severity: 'HIGH' },

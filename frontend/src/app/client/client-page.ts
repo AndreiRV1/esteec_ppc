@@ -98,7 +98,7 @@ const MAX_HOURLY_DAYS = 14;
       <section aria-labelledby="cereri" class="requests">
         <div class="page-head">
           <h2 id="cereri">Cererile mele de racordare</h2>
-          <a class="button secondary" routerLink="/racordare/noua">Depune o cerere</a>
+          <a class="button secondary" routerLink="/connection-requests/new">Depune o cerere</a>
         </div>
         <fg-status [of]="requests" />
         @if (requests.data(); as list) {

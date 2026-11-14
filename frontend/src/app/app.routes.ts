@@ -3,20 +3,20 @@ import { Routes } from '@angular/router';
 import { AuthService } from './core/auth';
 import { roleGuard } from './core/guards';
 
-/** Each area is lazy-loaded and guarded by role; "/" sends the user to their own area. */
+/** Each area is lazy-loaded and guarded by role; "/" sends the user to their own area. Admin has access to all areas. */
 export const routes: Routes = [
   { path: '', pathMatch: 'full', redirectTo: () => inject(AuthService).home() },
   {
     path: 'client',
     canActivate: [roleGuard],
-    data: { roles: ['client'] },
+    data: { roles: ['client', 'admin'] },
     loadComponent: () => import('./client/client-page').then((m) => m.ClientPage),
   },
   {
-    // Employees file requests for applicants; clients can file their own.
-    path: 'racordare/noua',
+    // Employees and admins file requests for applicants; clients can file their own.
+    path: 'connection-requests/new',
     canActivate: [roleGuard],
-    data: { roles: ['employee', 'client'] },
+    data: { roles: ['employee', 'client', 'admin'] },
     loadComponent: () => import('./employee/connection-form-page').then((m) => m.ConnectionFormPage),
   },
   {
@@ -24,23 +24,36 @@ export const routes: Routes = [
     canActivate: [roleGuard],
     data: { roles: ['admin'] },
     children: [
-      { path: '', pathMatch: 'full', redirectTo: 'cereri' },
-      { path: 'cereri', loadComponent: () => import('./admin/requests-page').then((m) => m.RequestsPage) },
-      { path: 'cereri/:id', loadComponent: () => import('./admin/request-detail-page').then((m) => m.RequestDetailPage) },
-      { path: 'politici', loadComponent: () => import('./admin/policies-page').then((m) => m.PoliciesPage) },
-      { path: 'monitorizare', loadComponent: () => import('./admin/monitoring-page').then((m) => m.MonitoringPage) },
+      { path: '', pathMatch: 'full', redirectTo: 'connection-requests' },
+      { path: 'connection-requests', loadComponent: () => import('./admin/requests-page').then((m) => m.RequestsPage) },
+      { path: 'connection-requests/:id', loadComponent: () => import('./admin/request-detail-page').then((m) => m.RequestDetailPage) },
+      { path: 'storage-policies', loadComponent: () => import('./admin/policies-page').then((m) => m.PoliciesPage) },
+      { path: 'statistics', loadComponent: () => import('./admin/statistics-page').then((m) => m.StatisticsPage) },
+      { path: 'monitoring', loadComponent: () => import('./admin/monitoring-page').then((m) => m.MonitoringPage) },
+      // Legacy Romanian route redirects
+      { path: 'cereri', redirectTo: 'connection-requests', pathMatch: 'full' },
+      { path: 'cereri/:id', redirectTo: 'connection-requests/:id', pathMatch: 'full' },
+      { path: 'politici', redirectTo: 'storage-policies', pathMatch: 'full' },
+      { path: 'statistici', redirectTo: 'statistics', pathMatch: 'full' },
+      { path: 'monitorizare', redirectTo: 'monitoring', pathMatch: 'full' },
     ],
   },
   {
-    path: 'angajat',
+    path: 'employee',
     canActivate: [roleGuard],
-    data: { roles: ['employee'] },
+    data: { roles: ['employee', 'admin'] },
     children: [
-      { path: '', pathMatch: 'full', redirectTo: 'avarii' },
-      { path: 'avarii', loadComponent: () => import('./employee/faults-page').then((m) => m.FaultsPage) },
-      { path: 'video', loadComponent: () => import('./employee/videos-page').then((m) => m.VideosPage) },
+      { path: '', pathMatch: 'full', redirectTo: 'fault-records' },
+      { path: 'fault-records', loadComponent: () => import('./employee/faults-page').then((m) => m.FaultsPage) },
+      { path: 'drone-videos', loadComponent: () => import('./employee/videos-page').then((m) => m.VideosPage) },
     ],
   },
-  { path: 'fara-acces', loadComponent: () => import('./ui/no-access-page').then((m) => m.NoAccessPage) },
+  // Legacy Romanian top-level route redirects
+  { path: 'racordare/noua', redirectTo: '/connection-requests/new', pathMatch: 'full' },
+  { path: 'angajat', redirectTo: '/employee/fault-records', pathMatch: 'full' },
+  { path: 'angajat/avarii', redirectTo: '/employee/fault-records', pathMatch: 'full' },
+  { path: 'angajat/video', redirectTo: '/employee/drone-videos', pathMatch: 'full' },
+  { path: 'fara-acces', redirectTo: '/no-access', pathMatch: 'full' },
+  { path: 'no-access', loadComponent: () => import('./ui/no-access-page').then((m) => m.NoAccessPage) },
   { path: '**', redirectTo: '' },
 ];

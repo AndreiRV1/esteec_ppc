@@ -270,3 +270,67 @@ export interface StoragePolicy extends StoragePolicyUpdate {
   updatedAt: string;
   updatedBy: string;
 }
+
+// ---- statistics & data interpretation (PDF §5) ----------------------------------
+
+export type AllDataCategory = 'METER_READING' | FileCategory;
+
+export interface BackendCandidateMetrics {
+  backend: StorageBackend;
+  p50Ms: number;
+  p95Ms: number;
+  p99Ms: number;
+  throughputMbps: number;
+  errorRatePercent: number;
+  memoryFootprintMb: number;
+  verdict: string;
+}
+
+export interface CategoryStorageFit {
+  category: AllDataCategory;
+  typicalSize: string;
+  businessGuarantee: string;
+  recommendedBackend: StorageBackend;
+  whyRecommended: string;
+  candidates: BackendCandidateMetrics[];
+}
+
+export interface DayCategoryMetrics {
+  category: AllDataCategory;
+  normalFilesPerDay: number;
+  peakFilesPerDay: number;
+  normalVolumeMb: number;
+  peakVolumeMb: number;
+  normalP95Ms: number;
+  peakP95Ms: number;
+  normalErrorRatePercent: number;
+  peakErrorRatePercent: number;
+  resumedOrRetried: number;
+  slaMet: boolean;
+}
+
+export interface RegionalGridInsight {
+  region: Region;
+  activeMeters: number;
+  readings24h: number;
+  anomalies24h: number;
+  duplicatesFiltered24h: number;
+  avgVoltageV: number;
+  peakLoadWindow: string;
+  faults30d: number;
+  activeFaults: number;
+  avgRestoreMinutes: number;
+  affectedCustomers30d: number;
+  hotspotZone: string;
+  hotspotSubstation: string;
+  dominantFaultCause: string;
+  droneVideosStored: number;
+  recommendation: string;
+}
+
+export interface SystemStatistics {
+  generatedAt: string;
+  storageFit: CategoryStorageFit[];
+  normalVsPeak: DayCategoryMetrics[];
+  regionalInsights: RegionalGridInsight[];
+}

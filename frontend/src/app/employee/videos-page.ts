@@ -216,6 +216,28 @@ export class VideosPage {
   protected pick(event: Event): void {
     this.file = (event.target as HTMLInputElement).files?.[0];
     this.error.set(null);
+    if (!this.file || this.pending()) return;
+
+    // Auto-fill regional metadata when picking a generated FileGrid MP4 (`video_<REGION>_<LINE>_<TAG>_<ISO>_<ID>.mp4`)
+    const m = /^video_(MUNTENIA|BANAT|DOBROGEA)_([A-Za-z0-9-]+)_(?:INSP|STORM|LARGE1GB)_(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z_/i.exec(
+      this.file.name,
+    );
+    if (m) {
+      const reg = m[1].toUpperCase() as Region;
+      const lineCode = m[2];
+      const cs = this.counties(reg);
+      const defaultCounty = cs[0]?.name ?? '';
+      const dronePrefix = reg === 'MUNTENIA' ? 'DRN-MUN-M350-01' : reg === 'BANAT' ? 'DRN-BAN-M350-01' : 'DRN-DOB-M350-01';
+      this.draft = {
+        region: this.draft.region || reg,
+        county: this.draft.county || defaultCounty,
+        lineCode: this.draft.lineCode || lineCode,
+        droneId: this.draft.droneId || dronePrefix,
+        flightStartedAt: this.draft.flightStartedAt || `${m[3]}-${m[4]}-${m[5]}T${m[6]}:${m[7]}`,
+        durationSeconds: this.draft.durationSeconds,
+        notes: this.draft.notes || `Inspecție video cu drona pe linia ${lineCode} (${reg}).`,
+      };
+    }
   }
 
   /** Starts a new upload, or continues the pending one when the same file is chosen again. */
