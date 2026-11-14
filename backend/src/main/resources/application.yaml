@@ -23,6 +23,9 @@ spring:
   mvc:
     problemdetails:
       enabled: true
+    # Downloads stream asynchronously; Tomcat's 30 s default would cut off large videos.
+    async:
+      request-timeout: -1
   security:
     oauth2:
       resourceserver:

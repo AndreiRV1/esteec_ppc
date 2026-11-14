@@ -110,8 +110,8 @@ import { OperationId } from '../ui/operation-id';
             </label>
             @if (decisionError(); as message) { <p class="notice error" role="alert">{{ message }}</p> }
             <div class="actions">
-              <button type="button" [disabled]="busy()" (click)="decide('ACCEPTED')">Aprobă cererea</button>
-              <button class="danger" type="button" [disabled]="busy()" (click)="decide('REJECTED') || reasonBox.focus()">Respinge cererea</button>
+              <button type="button" [disabled]="busy() || detail.loading()" (click)="decide('ACCEPTED')">Aprobă cererea</button>
+              <button class="danger" type="button" [disabled]="busy() || detail.loading()" (click)="decide('REJECTED') || reasonBox.focus()">Respinge cererea</button>
             </div>
           } @else {
             <p>
@@ -161,6 +161,7 @@ export class RequestDetailPage {
       untracked(() => {
         this.downloadNote.set(null);
         this.decisionError.set(null);
+        this.reason = '';
         void this.detail.run(() => this.api.adminRequest(id));
       });
     });

@@ -71,7 +71,7 @@ public class FaultRecordController {
                                           @AuthenticationPrincipal Jwt user) {
         County county = County.parse(metadata.county(), metadata.region());
         if (metadata.restoredAt() != null && metadata.restoredAt().isBefore(metadata.occurredAt())) {
-            throw ApiException.badRequest("invalid_restored_at", "restoredAt is before occurredAt");
+            throw ApiException.badRequest("invalid_restored_at", "Already restored, or restoredAt is before occurredAt or in the future");
         }
         if (file.isEmpty()) {
             throw ApiException.badRequest("empty_file", "The file is empty");
@@ -138,7 +138,7 @@ public class FaultRecordController {
         View fault = require(id);
         Instant at = body == null || body.restoredAt() == null ? Instant.now() : body.restoredAt();
         if (!repository.markRestored(id, at)) {
-            throw ApiException.badRequest("invalid_restored_at", "restoredAt is before occurredAt");
+            throw ApiException.badRequest("invalid_restored_at", "Already restored, or restoredAt is before occurredAt or in the future");
         }
         audit.record(fault.region(), user.getSubject(), "FAULT_RECORD_RESTORED", "fault_record", id,
                 Map.of("restoredAt", at.toString()));

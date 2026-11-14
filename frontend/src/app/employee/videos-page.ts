@@ -280,6 +280,11 @@ export class VideosPage {
     } catch (error) {
       if (error instanceof UploadPausedError) {
         this.phase.set('paused');
+      } else if (pending && [409, 422].includes(toProblem(error).status ?? 0)) {
+        // Final checksum failed or the server already closed the upload: resuming can never succeed.
+        this.forget();
+        this.phase.set('idle');
+        this.error.set(`${problemMessage(error)} Încarcă fișierul din nou de la început.`);
       } else if (pending && toProblem(error).status === 404) {
         // The server no longer knows this upload (expired or cleaned up): start over.
         this.forget();

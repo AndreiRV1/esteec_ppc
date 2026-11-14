@@ -33,6 +33,7 @@ public class MeterReadingProcessor {
     private static final BigDecimal MAX_VOLTAGE = new BigDecimal("253");
     private static final BigDecimal SPIKE_FACTOR = BigDecimal.TEN;
     private static final BigDecimal MAX_KWH = new BigDecimal("100000000"); // fits numeric(12,3)
+    private static final BigDecimal COLUMN_MAX_VOLTAGE = new BigDecimal("10000");
     private static final Duration CLOCK_TOLERANCE = Duration.ofMinutes(5);
 
     private final MeterReadingRepository repository;
@@ -97,7 +98,8 @@ public class MeterReadingProcessor {
     private List<Reading> evaluate(Raw raw) {
         JsonNode root = json.readTree(raw.payload());
         int intervalMinutes = root.path("intervalMinutes").asInt(15);
-        require(intervalMinutes > 0, "intervalMinutes must be positive");
+        // interval_minutes is smallint; a day is the longest interval that makes sense.
+        require(intervalMinutes > 0 && intervalMinutes <= 1440, "intervalMinutes must be 1..1440");
         long intervalSeconds = intervalMinutes * 60L;
 
         record Value(Instant at, BigDecimal energy, BigDecimal register, BigDecimal voltage) {
@@ -111,7 +113,10 @@ public class MeterReadingProcessor {
             BigDecimal register = number(v, "registerKwh");
             require(register.signum() >= 0 && register.compareTo(MAX_KWH) < 0 && energy.abs().compareTo(MAX_KWH) < 0,
                     "value out of range at " + at);
-            values.add(new Value(at, energy, register, v.hasNonNull("voltageV") ? number(v, "voltageV") : null));
+            BigDecimal voltage = v.hasNonNull("voltageV") ? number(v, "voltageV") : null;
+            // voltage_v is numeric(6,2): a larger value would fail the insert and block the whole batch.
+            require(voltage == null || voltage.abs().compareTo(COLUMN_MAX_VOLTAGE) < 0, "voltage out of range at " + at);
+            values.add(new Value(at, energy, register, voltage));
         }
         require(!values.isEmpty(), "values is empty");
         values.sort(Comparator.comparing(Value::at));

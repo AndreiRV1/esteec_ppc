@@ -181,8 +181,8 @@ export class FaultsPage {
     this.resolving.set(fault.id);
     try {
       await this.api.restoreFault(fault.id);
+      this.search(this.results.data()?.page ?? 0); // clears the note, so it runs first
       this.note.set({ ok: true, text: `Avaria de la ${fault.substationCode} a fost marcată ca rezolvată.` });
-      this.search(this.results.data()?.page ?? 0);
     } catch (error) {
       this.note.set({ ok: false, text: problemMessage(error) });
     } finally {

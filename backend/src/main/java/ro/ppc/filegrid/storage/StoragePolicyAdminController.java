@@ -39,7 +39,7 @@ public class StoragePolicyAdminController {
 
     static final long MAX_DATABASE_BYTES = 104_857_600; // storage_policy_db_size_limit
     private static final Pattern BUCKET = Pattern.compile("^filegrid-[a-z0-9][a-z0-9-]{1,50}$");
-    private static final Pattern FTP_DIRECTORY = Pattern.compile("^/files(/[A-Za-z0-9._-]+)+$");
+    private static final Pattern FTP_DIRECTORY = Pattern.compile("^/files(/[A-Za-z0-9][A-Za-z0-9._-]*)+$");
 
     private final StoragePolicyRepository policies;
     private final S3Client s3;

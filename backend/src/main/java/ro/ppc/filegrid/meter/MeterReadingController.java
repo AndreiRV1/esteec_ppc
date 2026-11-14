@@ -2,6 +2,8 @@ package ro.ppc.filegrid.meter;
 
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
+import jakarta.servlet.http.HttpServletRequest;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -15,7 +17,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -54,10 +55,12 @@ public class MeterReadingController {
 
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<Map<String, String>> ingest(
-            @RequestHeader(value = "X-API-Key", required = false) String key, @RequestBody byte[] body) {
+            @RequestHeader(value = "X-API-Key", required = false) String key, HttpServletRequest request) throws IOException {
         if (key == null || !MessageDigest.isEqual(apiKey, key.getBytes(StandardCharsets.UTF_8))) {
             throw new ApiException(HttpStatus.UNAUTHORIZED, "invalid_api_key", "Missing or invalid X-API-Key");
         }
+        // Read the body only after the key check, and never more than the limit allows.
+        byte[] body = request.getInputStream().readNBytes(MAX_BYTES + 1);
         if (body.length > MAX_BYTES) {
             throw new ApiException(HttpStatus.valueOf(413), "reading_too_large", "Reading exceeds 1 MB");
         }
