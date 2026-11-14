@@ -86,7 +86,18 @@ interface Row {
     </div>
   `,
   styles: `
-    .policy { border-top: 1px solid var(--line); padding-top: 14px; }
+    .card { gap: 0; padding-bottom: 8px; }
+    .card > h2 { margin-bottom: 4px; }
+    .card > p.muted { margin-bottom: 8px; }
+    .policy { border-top: 1px solid var(--line); padding: 18px 0; }
+    .policy:first-of-type { margin-top: 12px; }
+    .policy legend h3 { font-size: 1rem; }
+    /* Wide screens: the region names form a left column, so rows scan like a table. */
+    @media (min-width: 1000px) {
+      .policy fieldset { display: grid; grid-template-columns: 150px minmax(0, 1fr); column-gap: 20px; row-gap: 8px; }
+      .policy legend { float: left; grid-column: 1; padding-top: 30px; }
+      .policy fieldset > :not(legend) { grid-column: 2; }
+    }
     .fields { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
     .fields label { flex: 1 1 140px; }
     .fields label.target { flex: 3 1 260px; }

@@ -42,7 +42,10 @@ type Phase = 'idle' | 'hashing' | 'uploading' | 'pausing' | 'paused' | 'finishin
   imports: [FormsModule, DatePipe, PercentPipe, LabelPipe, BytesPipe, Status],
   template: `
     <div class="page">
-      <h1>Video-uri de la inspecțiile cu drona</h1>
+      <div class="intro">
+        <h1>Video-uri de la inspecțiile cu drona</h1>
+        <p>Fișierele mari se încarcă pe bucăți și pot fi reluate dacă se întrerupe conexiunea.</p>
+      </div>
       <div class="segmented" role="tablist">
         <button type="button" role="tab" [attr.aria-selected]="tab() === 'upload'" (click)="tab.set('upload')">Încarcă</button>
         <button type="button" role="tab" [attr.aria-selected]="tab() === 'search'" (click)="openSearch()">Caută și descarcă</button>

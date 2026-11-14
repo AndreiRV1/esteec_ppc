@@ -14,7 +14,7 @@ export interface AppConfig {
 export const APP_CONFIG = new InjectionToken<AppConfig>('APP_CONFIG');
 
 const DEFAULTS: AppConfig = {
-  keycloakUrl: 'http://localhost:8180',
+  keycloakUrl: 'https://localhost:8443/auth',
   realm: 'filegrid',
   clientId: 'filegrid-web',
   grafanaUrl: '/grafana',

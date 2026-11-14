@@ -35,7 +35,7 @@ const DASHBOARDS = [
   `,
   styles: `
     .segmented { justify-self: start; max-width: 100%; overflow-x: auto; }
-    iframe { width: 100%; height: max(480px, calc(100vh - 260px)); border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); }
+    iframe { width: 100%; height: max(480px, calc(100vh - 260px)); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--card); box-shadow: var(--shadow); }
   `,
 })
 export class MonitoringPage {

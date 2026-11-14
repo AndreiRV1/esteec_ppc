@@ -14,19 +14,19 @@ const PAGE_SIZE = 20;
   imports: [FormsModule, RouterLink, DatePipe, DecimalPipe, LabelPipe, Status],
   template: `
     <div class="page">
-      <h1>Cereri de racordare</h1>
-      <div class="row">
-        <label>Stare
-          <select [ngModel]="status()" (ngModelChange)="setFilter(status, $event)">
-            <option value="">Toate</option>
-            <option value="PENDING">În așteptare</option>
-            <option value="ACCEPTED">Aprobate</option>
-            <option value="REJECTED">Respinse</option>
-          </select>
-        </label>
-        <label>Regiune
+      <div class="intro">
+        <h1>Cereri de racordare</h1>
+        <p>Verifică documentele și aprobă sau respinge cererile depuse.</p>
+      </div>
+      <div class="toolbar">
+        <div class="segmented" role="group" aria-label="Stare">
+          @for (option of statusOptions; track option.value) {
+            <button type="button" [attr.aria-pressed]="status() === option.value" (click)="setFilter(status, option.value)">{{ option.text }}</button>
+          }
+        </div>
+        <label class="region"><span class="sr">Regiune</span>
           <select [ngModel]="region()" (ngModelChange)="setFilter(region, $event)">
-            <option value="">Toate</option>
+            <option value="">Toate regiunile</option>
             @for (r of regions; track r) { <option [value]="r">{{ r | label }}</option> }
           </select>
         </label>
@@ -51,7 +51,7 @@ const PAGE_SIZE = 20;
                     <td data-label="Tip">{{ request.requestType | label }} · {{ request.applicantType | label }}</td>
                     <td data-label="Putere" class="data">{{ request.requestedPowerKw | number }} kW</td>
                     <td data-label="Stare"><span class="badge {{ request.status }}">{{ request.status | label }}</span></td>
-                    <td><a class="button secondary small" [routerLink]="[request.clientId]">Deschide</a></td>
+                    <td class="open"><a class="button secondary small" [routerLink]="[request.clientId]">Deschide</a></td>
                   </tr>
                 }
               </tbody>
@@ -69,12 +69,21 @@ const PAGE_SIZE = 20;
   styles: `
     .pager { align-items: center; justify-content: space-between; }
     .sr { position: absolute; left: -9999px; }
-    label { flex: 1 1 180px; max-width: 260px; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
+    .segmented { max-width: 100%; overflow-x: auto; }
+    .region { flex: 0 1 240px; }
+    td.open { text-align: right; }
   `,
 })
 export class RequestsPage {
   private readonly api = inject(ApiService);
   protected readonly regions = REGIONS;
+  protected readonly statusOptions: { value: RequestStatus | ''; text: string }[] = [
+    { value: 'PENDING', text: 'În așteptare' },
+    { value: 'ACCEPTED', text: 'Aprobate' },
+    { value: 'REJECTED', text: 'Respinse' },
+    { value: '', text: 'Toate' },
+  ];
   protected readonly status = signal<RequestStatus | ''>('PENDING');
   protected readonly region = signal<Region | ''>('');
   protected readonly page = signal(0);

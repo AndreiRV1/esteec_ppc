@@ -9,7 +9,7 @@ RUN npm run build
 # Unprivileged nginx: runs as uid 101, listens on 8080, needs no capabilities.
 FROM nginxinc/nginx-unprivileged:1.29-alpine
 # Runtime configuration (served as /config.json). No secrets: the app is a public OIDC client.
-ENV KEYCLOAK_URL=http://localhost:8180 \
+ENV KEYCLOAK_URL=https://localhost:8443/auth \
     KEYCLOAK_REALM=filegrid \
     KEYCLOAK_CLIENT_ID=filegrid-web \
     GRAFANA_URL=/grafana \

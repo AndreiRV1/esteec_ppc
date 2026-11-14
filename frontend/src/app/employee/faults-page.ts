@@ -16,7 +16,10 @@ const emptyUpload = () => ({
   imports: [FormsModule, DatePipe, DecimalPipe, LabelPipe, BytesPipe, Status],
   template: `
     <div class="page">
-      <h1>Înregistrări de avarie</h1>
+      <div class="intro">
+        <h1>Înregistrări de avarie</h1>
+        <p>Încarcă fișierul unei avarii noi sau caută înregistrări existente pentru descărcare.</p>
+      </div>
       <div class="segmented" role="tablist">
         <button type="button" role="tab" [attr.aria-selected]="tab() === 'upload'" (click)="tab.set('upload')">Încarcă</button>
         <button type="button" role="tab" [attr.aria-selected]="tab() === 'search'" (click)="openSearch()">Caută și descarcă</button>
@@ -110,7 +113,7 @@ const emptyUpload = () => ({
                       <td data-label="Regiune">{{ fault.region | label }}</td>
                       <td data-label="Stație" class="data">{{ fault.substationCode }}</td>
                       <td data-label="Zonă">{{ fault.locality ? fault.locality + ', ' : '' }}{{ fault.county }}</td>
-                      <td data-label="Severitate"><span class="badge {{ fault.severity }}">{{ fault.severity | label }}</span></td>
+                      <td data-label="Severitate"><span class="severity {{ fault.severity }}">{{ fault.severity | label }}</span></td>
                       <td data-label="Clienți afectați">{{ fault.affectedCustomers === null ? '—' : (fault.affectedCustomers | number) }}</td>
                       <td data-label="Stare">{{ fault.restoredAt ? 'Restabilită' : 'În desfășurare' }}</td>
                       <td>
