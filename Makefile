@@ -6,10 +6,10 @@ SERVICES := postgres minio ftp
 INIT_JOBS := db-migrate minio-init
 
 .DEFAULT_GOAL := help
-.PHONY: help env up dev down ps logs psql migrate clean
+.PHONY: help env up dev down ps logs psql migrate clean gen-data gen-storm gen-large-video seed-data verify-data data-status
 
 help: ## Show this help
-	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-8s %s\n", $$1, $$2}'
+	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-16s %s\n", $$1, $$2}'
 
 .env:
 	./scripts/gen-env.sh
@@ -46,3 +46,21 @@ migrate: ## Re-run Flyway migrations
 
 clean: ## Stop the stack and DELETE all data volumes
 	$(DEV) down -v
+
+gen-data: ## Generate regional fault JSONs (1-10 MB) and drone MP4 videos
+	python3 backend/fault_videos/fault_videos.py generate
+
+gen-storm: ## Generate a 10x storm spike of fault JSONs and post-storm drone MP4s
+	python3 backend/fault_videos/fault_videos.py generate --profile storm
+
+gen-large-video: ## Generate a >1 GB drone inspection MP4 video for scalability testing
+	python3 backend/fault_videos/fault_videos.py generate --faults-per-region 0 --videos-per-region 0 --large-video --large-video-mb 1050
+
+seed-data: .env ## Ingest generated fault JSONs & drone MP4s into running `make dev` storages
+	python3 backend/fault_videos/fault_videos.py ingest
+
+verify-data: .env ## Verify SHA-256 integrity of stored fault JSONs & drone MP4s in `make dev`
+	python3 backend/fault_videos/fault_videos.py verify
+
+data-status: ## Show regional dataset summary and `make dev` storage counts
+	python3 backend/fault_videos/fault_videos.py status
