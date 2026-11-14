@@ -7,8 +7,14 @@ Every document is a SPECIMEN with fictitious data, matching the values in docs/d
   certificat-inregistrare.pdf    company registration certificate (actIdentitate, PERSOANA_JURIDICA)
   aviz-amplasament.pdf           site permit (aviz, AVIZ_AMPLASAMENT)
   certificat-urbanism.pdf        urban planning certificate (aviz, CERTIFICAT_URBANISM)
+  cerere-racordare-firma.pdf     connection request of a company (spor de putere)
+and for the fault-record upload, in demo/faults/:
+  avarie-voluntari.pdf           fault report matching avarie-voluntari.json (Muntenia)
+  avarie-constanta.pdf           fault report, Dobrogea, supply already restored
+Every document the form can read back (OCR autofill) also gets a "-scanata" copy: the page rendered to a
+slightly rotated, noisy grayscale image with no text layer, so only OCR can read it.
 
-Usage: scripts/make-demo-documents.py   (needs chromium or google-chrome on PATH)
+Usage: scripts/make-demo-documents.py   (needs chromium or google-chrome, pdftoppm and Pillow)
 """
 import shutil
 import subprocess
@@ -16,8 +22,13 @@ import sys
 import tempfile
 from pathlib import Path
 
+from PIL import Image, ImageFilter
+
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "demo" / "documents"
+FAULTS = ROOT / "demo" / "faults"
+# Documents that also get an image-only "-scanata" copy for the OCR demo.
+SCANNED = ["cerere-racordare.pdf", "aviz-amplasament.pdf", "avarie-voluntari.pdf"]
 
 APPLICANT = {
     "name": "Ion Demo", "cnp": "1960529460012", "email": "ion.demo@example.ro", "phone": "+40 721 000 000",
@@ -120,6 +131,62 @@ DOCUMENTS = {
 }
 
 
+DOCUMENTS["cerere-racordare-firma.pdf"] = page(
+    "Cerere de racordare", "la rețeaua electrică de distribuție – spor de putere",
+    "<h2>1. Solicitant</h2>" + rows([
+        ("Tip solicitant", "Persoană juridică"), ("Denumire", COMPANY["name"]),
+        ("CUI", COMPANY["cui"]), ("Sediu", COMPANY["address"]),
+        ("Telefon", "+40 731 555 010"), ("E-mail", "office@demo-energie.example.ro")])
+    + "<h2>2. Locul de consum</h2>" + rows([
+        ("Județ", "Ilfov"), ("Localitate", "Voluntari"), ("Adresă", "Bd. Demonstrației nr. 10, hala 2"),
+        ("Tipul cererii", "Spor de putere"), ("Putere solicitată", "45 kW (trifazat)"),
+        ("Destinație", "Atelier de producție")])
+    + "<h2>3. Documente anexate</h2><ul><li>Certificat de înregistrare ONRC</li>"
+      f"<li>Certificat de urbanism nr. {PERMIT['cu']} din {PERMIT['issued']}</li></ul>"
+    + "<p>Declar pe propria răspundere că datele de mai sus sunt reale.</p>"
+    + f"<div class='sign'><div>Data: {PERMIT['issued']}</div><div>Semnătură și ștampilă</div></div>",
+    "Formular CR-01")
+
+FAULT_DOCUMENTS = {
+    # Same event as avarie-voluntari.json: 15:30 UTC is 17:30 in Romania (EET).
+    "avarie-voluntari.pdf": page(
+        "Raport de avarie", "fișa evenimentului în rețeaua de distribuție",
+        "<h2>1. Localizare</h2>" + rows([
+            ("Regiune", "Muntenia"), ("Județ", "Ilfov"), ("Localitate", "Voluntari"),
+            ("Cod stație", "ST-MUN-VOLUNTARI-110")])
+        + "<h2>2. Eveniment</h2>" + rows([
+            ("Momentul avariei", "14.11.2026 17:30"), ("Alimentare restabilită", "–"),
+            ("Severitate", "Ridicată"), ("Clienți afectați", "1.240"), ("Cauză", "Cablu subteran deteriorat"),
+            ("Descriere", "Declanșare protecție pe fiderul 20 kV Voluntari Nord. Echipă trimisă la fața locului.")])
+        + "<h2>3. Măsurători la declanșare</h2><table><tr><td>17:29:58</td><td>20,1 kV · 312 A</td></tr>"
+          "<tr><td>17:30:00</td><td>0,0 kV · 0 A</td></tr></table>"
+        + "<div class='sign'><div>Dispecer de serviciu</div><div>Șef tură</div></div>",
+        "Fișa FA-2026-1114"),
+    "avarie-constanta.pdf": page(
+        "Raport de avarie", "fișa evenimentului în rețeaua de distribuție",
+        "<h2>1. Localizare</h2>" + rows([
+            ("Regiune", "Dobrogea"), ("Județ", "Constanța"), ("Localitate", "Mangalia"),
+            ("Cod stație", "ST-DOB-MANGALIA-20")])
+        + "<h2>2. Eveniment</h2>" + rows([
+            ("Momentul avariei", "12.11.2026 03:05"), ("Alimentare restabilită", "12.11.2026 06:40"),
+            ("Severitate", "Medie"), ("Clienți afectați", "310"), ("Cauză", "Vânt puternic, conductor rupt"),
+            ("Descriere", "Conductor rupt pe LEA 20 kV Mangalia Sud între stâlpii 14 și 15. Alimentare refăcută prin buclare.")])
+        + "<div class='sign'><div>Dispecer de serviciu</div><div>Șef tură</div></div>",
+        "Fișa FA-2026-1112"),
+}
+
+
+def scan(pdf: Path, target: Path) -> None:
+    """Renders the first page and saves it as an image-only PDF that looks scanned: no text layer."""
+    subprocess.run(["pdftoppm", "-r", "150", "-gray", "-png", "-singlefile", str(pdf), str(pdf.with_suffix(""))],
+                   check=True)
+    image = Image.open(pdf.with_suffix(".png")).convert("L")
+    image = image.rotate(0.7, resample=Image.BICUBIC, expand=True, fillcolor=255).filter(ImageFilter.GaussianBlur(0.6))
+    noise = Image.effect_noise(image.size, 18)
+    image = Image.blend(image, noise, 0.08)
+    image.save(target, "PDF", resolution=150)
+
+
 def main() -> None:
     browser = shutil.which("chromium") or shutil.which("google-chrome") or shutil.which("chromium-browser")
     if not browser:
@@ -127,15 +194,21 @@ def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     # Snap-packaged Chromium can only read and write under $HOME, so the scratch files live there.
     with tempfile.TemporaryDirectory(dir=Path.home()) as tmp:
-        for name, html in DOCUMENTS.items():
+        jobs = [(name, html, OUT) for name, html in DOCUMENTS.items()]
+        jobs += [(name, html, FAULTS) for name, html in FAULT_DOCUMENTS.items()]
+        for name, html, out in jobs:
             source = Path(tmp) / (name + ".html")
             source.write_text(html, encoding="utf-8")
             target = Path(tmp) / name
             subprocess.run([browser, "--headless=new", "--disable-gpu", "--no-pdf-header-footer",
                             f"--print-to-pdf={target}", source.as_uri()],
                            check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=120)
-            shutil.copy(target, OUT / name)
-            print(f"wrote demo/documents/{name}")
+            shutil.copy(target, out / name)
+            print(f"wrote {(out / name).relative_to(ROOT)}")
+            if name in SCANNED:
+                scanned = out / name.replace(".pdf", "-scanata.pdf")
+                scan(target, scanned)
+                print(f"wrote {scanned.relative_to(ROOT)}")
 
 
 if __name__ == "__main__":

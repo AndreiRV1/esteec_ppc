@@ -67,6 +67,21 @@ const emptyForm = (): ConnectionRequestForm => ({
       } @else {
         <form ngNativeValidate (ngSubmit)="submit()" #f="ngForm" class="card steps">
           <fieldset [disabled]="sending()">
+            <legend><h2>Documente</h2></legend>
+            <p class="muted">PDF, JPEG sau PNG, cel mult 10 MB fiecare. Încarcă întâi cererea și avizul: completăm
+              formularul din ele (și din documente scanate), iar tu doar verifici datele.</p>
+            <div class="grid-2">
+              @for (slot of slots; track slot.key) {
+                <label>{{ slot.text }}
+                  <input type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" required
+                         (change)="pick(slot.key, $event)" />
+                </label>
+              }
+            </div>
+            @if (reading()) { <p class="notice" role="status">Se citește documentul…</p> }
+            @if (autofill(); as note) { <p class="notice" [class.success]="note.ok" role="status">{{ note.text }}</p> }
+          </fieldset>
+          <fieldset [disabled]="sending()">
             <legend><h2>Solicitant</h2></legend>
             <div class="grid-2">
               <label>Tip solicitant
@@ -149,18 +164,6 @@ const emptyForm = (): ConnectionRequestForm => ({
             </div>
           </fieldset>
 
-          <fieldset [disabled]="sending()">
-            <legend><h2>Documente</h2></legend>
-            <p class="muted">PDF, JPEG sau PNG, cel mult 10 MB fiecare.</p>
-            <div class="grid-2">
-              @for (slot of slots; track slot.key) {
-                <label>{{ slot.text }}
-                  <input type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" required
-                         (change)="pick(slot.key, $event)" />
-                </label>
-              }
-            </div>
-          </fieldset>
 
           @if (error(); as message) { <p class="notice error" role="alert">{{ message }}</p> }
           <div class="row">
@@ -220,8 +223,51 @@ export class ConnectionFormPage {
     return this.form.applicantType === 'PERSOANA_JURIDICA';
   }
 
-  protected pick(slot: Slot, event: Event): void {
-    this.files[slot] = (event.target as HTMLInputElement).files?.[0];
+  protected readonly reading = signal(false);
+  protected readonly autofill = signal<{ ok: boolean; text: string } | null>(null);
+  /** Fields filled from a document; a later document may update them, but never what the user typed. */
+  private autofilled = new Set<string>();
+
+  protected async pick(slot: Slot, event: Event): Promise<void> {
+    const file = (event.target as HTMLInputElement).files?.[0];
+    this.files[slot] = file;
+    // The identity card is not read: its dates would land in the permit's fields.
+    if (!file || slot === 'actIdentitate') return;
+    this.reading.set(true);
+    try {
+      const { source, fields } = await this.api.extractDocument('CONNECTION', file);
+      const filled = this.apply(fields);
+      this.autofill.set(filled
+        ? { ok: true, text: `Am completat ${filled} câmpuri din „${file.name}”${source === 'OCR' ? ' (document scanat, citit prin OCR)' : ''}. Verifică-le înainte de trimitere.` }
+        : { ok: false, text: `Nu am găsit date de completat în „${file.name}”. Completează formularul manual.` });
+    } catch {
+      this.autofill.set({ ok: false, text: 'Documentul nu a putut fi citit automat. Completează formularul manual.' });
+    } finally {
+      this.reading.set(false);
+    }
+  }
+
+  /** Copies the fields the server read into the form. Returns how many were filled. */
+  private apply(fields: Record<string, string>): number {
+    const defaults = emptyForm();
+    let count = 0;
+    for (const [path, raw] of Object.entries(fields)) {
+      const keys = path.split('.');
+      const key = keys.pop()!;
+      const target = keys.reduce<any>((o, k) => o?.[k], this.form);
+      const initial = keys.reduce<any>((o, k) => o?.[k], defaults)?.[key];
+      if (!target || !(key in target)) continue;
+      const untouched = target[key] === '' || target[key] === initial || this.autofilled.has(path);
+      if (!untouched) continue;
+      let value: string | number | undefined = raw;
+      if (key === 'requestedPowerKw') value = Number(raw);
+      if (path === 'consumptionPlace.county') value = COUNTIES.find((c) => c.name === raw)?.code;
+      if (value === undefined || Number.isNaN(value)) continue;
+      target[key] = value;
+      this.autofilled.add(path);
+      count++;
+    }
+    return count;
   }
 
   protected async submit(): Promise<void> {
@@ -265,6 +311,8 @@ export class ConnectionFormPage {
   protected reset(): void {
     this.form = emptyForm();
     this.files = {};
+    this.autofilled.clear();
+    this.autofill.set(null);
     this.created.set(null);
   }
 }

@@ -97,6 +97,13 @@
             <version>${tink.version}</version>
         </dependency>
 
+        <!-- Reads the text layer of uploaded PDFs and renders scanned pages for OCR (form autofill) -->
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>3.0.5</version>
+        </dependency>
+
         <!-- API docs at /swagger-ui.html -->
         <dependency>
             <groupId>org.springdoc</groupId>

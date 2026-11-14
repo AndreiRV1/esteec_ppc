@@ -55,7 +55,7 @@ const emptyUpload = () => ({
               </label>
               <label>Clienți afectați <input name="affected" type="number" [(ngModel)]="draft.affectedCustomers" min="0" step="1" /></label>
               <label>Cauză <input name="cause" [(ngModel)]="draft.cause" maxlength="200" /></label>
-              <label>Fișierul înregistrării
+              <label>Fișierul înregistrării (JSON, raport PDF sau scanat: completăm câmpurile din el)
                 <input type="file" required (change)="pick($event)" />
               </label>
             </div>
@@ -193,6 +193,10 @@ export class FaultsPage {
   protected async pick(event: Event): Promise<void> {
     this.file = (event.target as HTMLInputElement).files?.[0];
     this.autoFilledNote.set(null);
+    if (this.file && /\.(pdf|jpe?g|png)$/i.test(this.file.name)) {
+      await this.fillFromDocument(this.file);
+      return;
+    }
     if (!this.file || (!this.file.name.endsWith('.json') && this.file.type !== 'application/json')) return;
     try {
       const parsed = JSON.parse(await this.file.text());
@@ -229,6 +233,34 @@ export class FaultsPage {
       }
     } catch {
       // Non-FileGrid JSON or binary file: user fills fields manually
+    }
+  }
+
+  /** A fault report as PDF (text or scanned) or photo: the server reads it (OCR if needed) and we fill the form. */
+  private async fillFromDocument(file: File): Promise<void> {
+    this.autoFilledNote.set('Se citește raportul…');
+    try {
+      const { source, fields } = await this.api.extractDocument('FAULT', file);
+      const f = fields;
+      this.draft = {
+        ...this.draft,
+        ...(f['region'] && { region: f['region'] as Region }),
+        ...(f['county'] && { county: f['county'] }),
+        ...(f['locality'] && { locality: f['locality'] }),
+        ...(f['substationCode'] && { substationCode: f['substationCode'] }),
+        ...(f['occurredAt'] && { occurredAt: f['occurredAt'] }),
+        ...(f['restoredAt'] && { restoredAt: f['restoredAt'] }),
+        ...(f['severity'] && { severity: f['severity'] as Severity }),
+        ...(f['cause'] && { cause: f['cause'] }),
+        ...(f['affectedCustomers'] && { affectedCustomers: Number(f['affectedCustomers']) }),
+        ...(f['description'] && { description: f['description'] }),
+      };
+      const count = Object.keys(f).length;
+      this.autoFilledNote.set(count
+        ? `Am completat ${count} câmpuri din raport${source === 'OCR' ? ' (document scanat, citit prin OCR)' : ''}. Verifică-le înainte de încărcare.`
+        : 'Nu am găsit date de completat în acest document. Completează câmpurile manual.');
+    } catch {
+      this.autoFilledNote.set('Documentul nu a putut fi citit automat. Completează câmpurile manual.');
     }
   }
 

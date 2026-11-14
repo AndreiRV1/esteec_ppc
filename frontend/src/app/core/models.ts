@@ -374,3 +374,9 @@ export interface SystemStatistics {
   normalVsPeak: DayCategoryMetrics[];
   regionalInsights: RegionalGridInsight[];
 }
+
+/** What the server read from a document for form autofill; keys are the form's field paths. */
+export interface Extraction {
+  source: 'TEXT' | 'OCR' | 'NONE';
+  fields: Record<string, string>;
+}

@@ -33,6 +33,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/v1/meter-readings").permitAll()
                         // Registration: a racordare without an account creates the applicant's login.
                         .requestMatchers(HttpMethod.POST, "/api/v1/public/connection-requests").permitAll()
+                        // Form autofill reads a document and stores nothing; /register needs it before login.
+                        .requestMatchers(HttpMethod.POST, "/api/v1/public/document-extraction").permitAll()
                         // Applicants file their own requests; employees file them on an applicant's behalf.
                         .requestMatchers("/api/v1/connection-requests/**").hasAnyRole(CLIENT, EMPLOYEE)
                         .requestMatchers("/api/v1/fault-records/**", "/api/v1/drone-videos/**")

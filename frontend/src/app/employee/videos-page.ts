@@ -3,8 +3,9 @@ import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiService, Loader, downloadAndSave, problemMessage, toProblem } from '../core/api';
 import { UploadPausedError, UploadProgress, uploadParts } from '../core/chunked-upload';
-import { BytesPipe, LabelPipe, countiesOf, dayToIso, formatBytes, localToIso } from '../core/format';
+import { BytesPipe, LabelPipe, countiesOf, dayToIso, formatBytes, localToIso, toLocalInput } from '../core/format';
 import { DroneVideo, Page, REGIONS, Region, StoredRef, VideoFilter } from '../core/models';
+import { readMp4Metadata, VideoMetadata } from '../core/mp4-metadata';
 import { sha256OfBlob } from '../core/sha256';
 import { Status } from '../ui/status';
 import { OperationId } from '../ui/operation-id';
@@ -89,6 +90,7 @@ type Phase = 'idle' | 'hashing' | 'uploading' | 'pausing' | 'paused' | 'finishin
           </fieldset>
           <label>Fișierul video
             <input type="file" accept="video/*" required [disabled]="busy()" (change)="pick($event)" />
+            @if (metaNote(); as info) { <p class="notice" role="status">{{ info }}</p> }
           </label>
 
           @if (phase() !== 'idle') {
@@ -213,36 +215,44 @@ export class VideosPage {
   protected readonly results = new Loader<Page<DroneVideo>>();
   protected readonly downloading = signal(false);
   protected readonly note = signal<{ ok: boolean; text: string } | null>(null);
+  protected readonly metaNote = signal<string | null>(null);
 
   protected busy(): boolean {
     return ['hashing', 'uploading', 'pausing', 'finishing'].includes(this.phase());
   }
 
-  protected pick(event: Event): void {
+  protected async pick(event: Event): Promise<void> {
     this.file = (event.target as HTMLInputElement).files?.[0];
     this.error.set(null);
+    this.metaNote.set(null);
     if (!this.file || this.pending()) return;
+    const file = this.file;
 
-    // Auto-fill regional metadata when picking a generated FileGrid MP4 (`video_<REGION>_<LINE>_<TAG>_<ISO>_<ID>.mp4`)
-    const m = /^video_(MUNTENIA|BANAT|DOBROGEA)_([A-Za-z0-9-]+)_(?:INSP|STORM|LARGE1GB)_(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z_/i.exec(
-      this.file.name,
-    );
-    if (m) {
-      const reg = m[1].toUpperCase() as Region;
-      const lineCode = m[2];
-      const cs = this.counties(reg);
-      const defaultCounty = cs[0]?.name ?? '';
-      const dronePrefix = reg === 'MUNTENIA' ? 'DRN-MUN-M350-01' : reg === 'BANAT' ? 'DRN-BAN-M350-01' : 'DRN-DOB-M350-01';
-      this.draft = {
-        region: this.draft.region || reg,
-        county: this.draft.county || defaultCounty,
-        lineCode: this.draft.lineCode || lineCode,
-        droneId: this.draft.droneId || dronePrefix,
-        flightStartedAt: this.draft.flightStartedAt || `${m[3]}-${m[4]}-${m[5]}T${m[6]}:${m[7]}`,
-        durationSeconds: this.draft.durationSeconds,
-        notes: this.draft.notes || `Inspecție video cu drona pe linia ${lineCode} (${reg}).`,
-      };
+    // 1. The container's own metadata (mvhd creation time and duration, FileGrid comment tag).
+    let meta: VideoMetadata = {};
+    try {
+      meta = await readMp4Metadata(file);
+    } catch {
+      // not an MP4 the browser can slice: fall back to the file name
     }
+    // 2. The generator's file name: `video_<REGION>_<LINE>_<TAG>_<yyyyMMddTHHmmssZ>_<ID>.mp4`.
+    const m = /^video_(MUNTENIA|BANAT|DOBROGEA)_([A-Za-z0-9-]+)_(?:INSP|STORM|LARGE1GB)_(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z_/i.exec(file.name);
+    const region = [meta.region, m?.[1]?.toUpperCase()].find((r): r is Region => REGIONS.includes(r as Region));
+    const flight = meta.flightStartedAt ?? (m ? `${m[3]}-${m[4]}-${m[5]}T${m[6]}:${m[7]}:${m[8]}Z` : undefined);
+    const lineCode = meta.lineCode ?? m?.[2];
+    const county = this.counties(region).some((c) => c.name === meta.county) ? meta.county : undefined;
+    // Only empty fields are filled: never overwrite what the user typed.
+    this.draft = {
+      region: this.draft.region || region || '',
+      county: this.draft.county || county || '',
+      lineCode: this.draft.lineCode || lineCode || '',
+      droneId: this.draft.droneId || meta.droneId || '',
+      flightStartedAt: this.draft.flightStartedAt || (flight ? toLocalInput(flight) : ''),
+      durationSeconds: this.draft.durationSeconds ?? meta.durationSeconds ?? null,
+      notes: this.draft.notes || (lineCode && region ? `Inspecție video cu drona pe linia ${lineCode} (${region}).` : ''),
+    };
+    const found = Object.keys(meta).length;
+    if (found) this.metaNote.set(`Am preluat ${found} câmpuri din metadatele video-ului. Verifică-le înainte de încărcare.`);
   }
 
   /** Starts a new upload, or continues the pending one when the same file is chosen again. */

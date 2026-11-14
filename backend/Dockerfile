@@ -8,6 +8,8 @@ RUN --mount=type=cache,target=/root/.m2 mvn -B -q -DskipTests package \
  && java -Djarmode=tools -jar target/filegrid.jar extract --layers --launcher --destination /extracted
 
 FROM eclipse-temurin:25-jre-alpine@sha256:e1898fd6a11fc965a994d8ace186fd3585aeb636cf8f05f47a723fcfee0b0918
+# Tesseract reads scanned documents for form autofill (Romanian + English models).
+RUN apk add --no-cache tesseract-ocr tesseract-ocr-data-ron tesseract-ocr-data-eng
 RUN addgroup -S filegrid && adduser -S -G filegrid -H filegrid \
  && mkdir -p /tmp/filegrid && chown filegrid:filegrid /tmp/filegrid
 WORKDIR /app
