@@ -1,0 +1,94 @@
+# Single TLS entry point in Kubernetes.
+# Routes each data category to its own isolated backend Deployment and HPA so a
+# 10x spike in meter readings or storm fault uploads cannot starve connection
+# requests or drone video transfers.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: filegrid
+  namespace: filegrid
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "70m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "120"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - localhost
+      secretName: filegrid-tls
+  rules:
+    - host: localhost
+      http:
+        paths:
+          - path: /api/v1/meter-readings
+            pathType: Prefix
+            backend:
+              service:
+                name: backend-meters
+                port:
+                  number: 8080
+          - path: /api/v1/fault-records
+            pathType: Prefix
+            backend:
+              service:
+                name: backend-faults
+                port:
+                  number: 8080
+          - path: /api/v1/drone-videos
+            pathType: Prefix
+            backend:
+              service:
+                name: backend-videos
+                port:
+                  number: 8080
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: backend-general
+                port:
+                  number: 8080
+          - path: /v3/api-docs
+            pathType: Prefix
+            backend:
+              service:
+                name: backend-general
+                port:
+                  number: 8080
+          - path: /swagger-ui
+            pathType: Prefix
+            backend:
+              service:
+                name: backend-general
+                port:
+                  number: 8080
+          - path: /auth
+            pathType: Prefix
+            backend:
+              service:
+                name: keycloak
+                port:
+                  number: 8080
+          - path: /grafana
+            pathType: Prefix
+            backend:
+              service:
+                name: grafana
+                port:
+                  number: 3000
+          - path: /mailpit
+            pathType: Prefix
+            backend:
+              service:
+                name: mailpit
+                port:
+                  number: 8025
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 8080
