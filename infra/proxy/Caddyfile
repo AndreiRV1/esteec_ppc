@@ -50,7 +50,7 @@ https://{$FILEGRID_SITE_HOST:localhost}:8443 {
 	# this machine or the container network, never for the outside world.
 	@ops_only {
 		path /auth/admin* /auth/realms/master* /mailpit*
-		not remote_ip {$FILEGRID_OPS_CIDRS:127.0.0.0/8 172.16.0.0/12}
+		not remote_ip {$FILEGRID_OPS_CIDRS:127.0.0.0/8 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 ::1 fc00::/7}
 	}
 	respond @ops_only 403
 

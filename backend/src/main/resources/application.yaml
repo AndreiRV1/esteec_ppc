@@ -7,7 +7,7 @@ spring:
     virtual:
       enabled: true
   datasource:
-    url: jdbc:postgresql://${FILEGRID_DB_HOST:localhost}:${FILEGRID_DB_PORT:5432}/${POSTGRES_DB:filegrid}
+    url: jdbc:postgresql://${FILEGRID_DB_HOST:localhost}:${FILEGRID_DB_PORT:${POSTGRES_HOST_PORT:5432}}/${POSTGRES_DB:filegrid}
     username: filegrid_app
     password: ${FILEGRID_DB_APP_PASSWORD}
     hikari:
@@ -29,8 +29,8 @@ spring:
         jwt:
           # Tokens carry the public issuer (Keycloak behind the proxy); keys are fetched
           # over plain HTTP from Keycloak directly (`make dev` publishes it on 8180).
-          issuer-uri: ${FILEGRID_OIDC_ISSUER:https://localhost:8443/auth/realms/filegrid}
-          jwk-set-uri: ${FILEGRID_OIDC_JWKS_URI:http://localhost:8180/auth/realms/filegrid/protocol/openid-connect/certs}
+          issuer-uri: ${FILEGRID_OIDC_ISSUER:${FILEGRID_PUBLIC_URL:https://localhost:8443}/auth/realms/filegrid}
+          jwk-set-uri: ${FILEGRID_OIDC_JWKS_URI:http://localhost:${KEYCLOAK_HOST_PORT:8180}/auth/realms/filegrid/protocol/openid-connect/certs}
           audiences: filegrid-api
 
 server:
@@ -98,7 +98,7 @@ filegrid:
   storage:
     temp-dir: ${FILEGRID_TEMP_DIR:${java.io.tmpdir}/filegrid}
     s3:
-      endpoint: ${FILEGRID_S3_ENDPOINT:http://localhost:9000}
+      endpoint: ${FILEGRID_S3_ENDPOINT:http://localhost:${MINIO_HOST_PORT:9000}}
       region: us-east-1
       access-key: ${FILEGRID_S3_ACCESS_KEY}
       secret-key: ${FILEGRID_S3_SECRET_KEY}
@@ -106,7 +106,7 @@ filegrid:
       socket-timeout: 30s
     ftp:
       host: ${FILEGRID_FTP_HOST:localhost}
-      port: ${FILEGRID_FTP_PORT:2121}
+      port: ${FILEGRID_FTP_PORT:${FTP_HOST_PORT:2121}}
       username: ${FTP_USER}
       password: ${FTP_PASSWORD}
       connect-timeout: 3s

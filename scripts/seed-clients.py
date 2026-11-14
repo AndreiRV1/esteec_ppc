@@ -21,7 +21,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "db" / "seed" / "clients.csv"
-COMPOSE = ["docker", "compose"]
+COMPOSE = ["docker", "compose"] + (
+    ["--env-file", os.environ["FILEGRID_ENV_FILE"]] if os.environ.get("FILEGRID_ENV_FILE") else []
+)
 
 
 def run(service, command, stdin=None):

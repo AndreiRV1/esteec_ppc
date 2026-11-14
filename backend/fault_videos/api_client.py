@@ -56,7 +56,7 @@ def log(message: str) -> None:
 
 def load_env(env_path: Optional[Path] = None) -> Dict[str, str]:
     """Variables from the process environment, completed with the repo's `.env`."""
-    path = env_path or (REPO_ROOT / ".env")
+    path = env_path or Path(os.environ.get("FILEGRID_ENV_FILE") or (REPO_ROOT / ".env"))
     env: Dict[str, str] = dict(os.environ)
     if path.exists():
         with path.open("r", encoding="utf-8") as f:
@@ -67,6 +67,22 @@ def load_env(env_path: Optional[Path] = None) -> Dict[str, str]:
                 k, v = line.split("=", 1)
                 env.setdefault(k.strip(), v.strip())
     return env
+
+
+def _proxy_local_ca() -> Optional[str]:
+    """Reads Caddy's local root CA certificate from the running proxy container, if available."""
+    import subprocess
+    cmd = ["docker", "compose"]
+    if os.environ.get("FILEGRID_ENV_FILE"):
+        cmd += ["--env-file", os.environ["FILEGRID_ENV_FILE"]]
+    cmd += ["exec", "-T", "proxy", "cat", "/data/caddy/pki/authorities/local/root.crt"]
+    try:
+        res = subprocess.run(cmd, cwd=REPO_ROOT, capture_output=True, text=True, timeout=5)
+        if res.returncode == 0 and "BEGIN CERTIFICATE" in res.stdout:
+            return res.stdout
+    except Exception:
+        pass
+    return None
 
 
 class ApiError(RuntimeError):
@@ -142,8 +158,11 @@ class FileGridApi:
                 self._ssl.check_hostname = False
                 self._ssl.verify_mode = ssl.CERT_NONE
                 print("WARNING: FILEGRID_TLS_INSECURE=1 - TLS certificates are NOT verified.", file=sys.stderr)
-            else:
+            elif s.ca_file:
                 self._ssl = ssl.create_default_context(cafile=s.ca_file)
+            else:
+                ca_pem = _proxy_local_ca()
+                self._ssl = ssl.create_default_context(cadata=ca_pem) if ca_pem else ssl.create_default_context()
 
     # ------------------------------------------------------------------ transport
 
