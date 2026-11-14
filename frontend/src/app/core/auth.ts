@@ -17,10 +17,13 @@ export class AuthService {
     readonly token: () => Promise<string | null>,
     readonly logout: () => void,
     readonly mock = false,
+    /** Keycloak's own "update password" page; null when there is no Keycloak session (mock, anonymous). */
+    readonly changePassword: (() => void) | null = null,
   ) {}
 
+  /** Exactly this role (admin does not imply the others: routes list admin where it applies). */
   hasRole(role: Role): boolean {
-    return this.roles.includes('admin') || this.roles.includes(role);
+    return this.roles.includes(role);
   }
 
   /** Landing page for this user: the area of their most privileged role. */
@@ -52,11 +55,13 @@ export async function initKeycloakAuth(config: AppConfig): Promise<AuthService> 
     KNOWN_ROLES.filter((role) => realmRoles.includes(role)),
     token,
     () => void keycloak.logout({ redirectUri: window.location.origin }),
+    false,
+    () => void keycloak.login({ action: 'UPDATE_PASSWORD', redirectUri: window.location.href }),
   );
 }
 
 /** Pages anyone can open without logging in (Keycloak's "Register" link leads to /register). */
-export const PUBLIC_PATHS = ['/register'];
+export const PUBLIC_PATHS = ['/register', '/privacy', '/terms', '/cookies'];
 
 /** Not logged in: no roles, no token. "Log in" is a full page load of the app, which goes through Keycloak. */
 export function anonymousAuth(): AuthService {

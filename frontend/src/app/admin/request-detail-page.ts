@@ -6,13 +6,14 @@ import { ApiService, Loader, downloadAndSave, problemMessage } from '../core/api
 import { BytesPipe, LabelPipe } from '../core/format';
 import { AdminRequestDetail, Decision } from '../core/models';
 import { Status } from '../ui/status';
+import { OperationId } from '../ui/operation-id';
 
 /**
  * One connection request for review: applicant data (decrypted by the backend
  * from the archive, every access audited), the documents, and the decision.
  */
 @Component({
-  imports: [FormsModule, RouterLink, DatePipe, DecimalPipe, LabelPipe, BytesPipe, Status],
+  imports: [FormsModule, RouterLink, DatePipe, DecimalPipe, LabelPipe, BytesPipe, Status, OperationId],
   template: `
     <div class="page">
       <p><a class="back" routerLink="/admin/connection-requests"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg>Toate cererile</a></p>
@@ -78,6 +79,7 @@ import { Status } from '../ui/status';
               Descarcă arhiva completă ({{ d.archive.sizeBytes | bytes }})
             </button>
             <p class="muted small-text">Stocată criptat ({{ d.archive.encryption | label }}) în {{ d.archive.backend | label }}.</p>
+            @if (d.archive.traceId) { <fg-operation [traceId]="d.archive.traceId" /> }
           </div>
           @if (downloadNote(); as note) {
             <p class="notice" [class.success]="note.ok" [class.error]="!note.ok" role="status">{{ note.text }}</p>

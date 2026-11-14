@@ -251,6 +251,8 @@ export interface ArchiveInfo {
   encryption: string;
   storedAt: string;
   lastVerifiedAt: string | null;
+  /** Trace of the submission (proxy → backend → storage). */
+  traceId?: string | null;
 }
 
 export interface AdminRequestDetail {
@@ -348,6 +350,18 @@ export interface RegionalGridInsight {
   dominantFaultCause: string;
   droneVideosStored: number;
   recommendation: string;
+}
+
+/** An alert firing now: which business requirement (spec table 2.1) is at risk. */
+export interface FiringAlert {
+  name: string;
+  severity: 'critical' | 'warning' | string;
+  requirement: string | null;
+  summary: string | null;
+  description: string | null;
+  category: string | null;
+  backend: string | null;
+  startsAt: string | null;
 }
 
 export interface SystemStatistics {

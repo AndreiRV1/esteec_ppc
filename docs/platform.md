@@ -44,14 +44,50 @@ Grafana is served at `${FILEGRID_PUBLIC_URL}/grafana/` with its own login form d
   - `filegrid-overview` (*FileGrid - Overview*): active backend replicas, request rate, error rate, p50/p95/p99 HTTP latency by category (`METER_READING`, `FAULT_RECORD`, `CONNECTION_DOCUMENTS`, `DRONE_VIDEO`), storage throughput/latency/errors by backend (`DATABASE`, `FTP`, `S3`), firing alerts, and WARN/ERROR logs linked to traces.
   - `filegrid-storage` (*FileGrid - Storage backends*): side-by-side throughput, error rate, p50/p95/p99 latency per `(category, backend, operation)`, SHA-256 integrity failures (`filegrid_storage_integrity_failures_total`), and Blackbox storage probe status.
   - `filegrid-meters` (*FileGrid - Meter readings*): pending raw backlog (`filegrid_meter_raw_pending`), oldest pending age (`filegrid_meter_raw_oldest_pending_seconds`), ingest status codes (`202` stored, `200` duplicate absorbed), processor throughput, and anomaly rate (`filegrid_meter_readings_total{quality="anomaly"}`).
-- **Logs & traces**: Alloy ships container logs to Loki and extracts `trace_id` from backend ECS JSON logs; the backend exports OTLP spans (including `storage put` / `storage get` spans with `filegrid.category` and `filegrid.backend` attributes) to Tempo, linked bidirectionally with Loki in Grafana.
-- **Alert rules** (`infra/observability/prometheus/rules/filegrid-alerts.yml`):
-  - `meter-readings`: `MeterReadingsNotProcessed`, `MeterBacklogGrowing`, `MeterIngestFailing`, `MeterReadingsRejected`, `MeterIngestSilent`
-  - `fault-records`: `FaultRecordsSlow`, `FaultRecordsFailing`
-  - `connection-documents`: `ConnectionDocumentsFailing`
-  - `drone-videos`: `DroneVideoUploadsFailing`
-  - `storage` & `platform`: `FileIntegrityFailure`, `StorageBackendDown`, `StorageOperationsFailing`, `StorageOperationsSlow`, `BackendDown`, `BackendInstanceDown`
-  - Alertmanager routes notifications to Mailpit (`https://localhost:8443/mailpit/`).
+- **Logs & traces**: Alloy ships container logs to Loki and extracts `trace_id` from backend ECS JSON logs; traces go to Tempo and are linked both ways with Loki in Grafana.
+
+### Following one operation from the request to storage
+
+Every API operation is one trace in Tempo:
+
+```
+filegrid-proxy  proxy POST /api/v1/fault-records            <- Caddy, the entry point (root span)
+filegrid          http post /api/v1/fault-records           <- backend request (auth, validation)
+filegrid            db record file                          <- metadata row, status UPLOADING
+filegrid            storage put                             <- the storage call: filegrid.category, .backend,
+                                                               .file_id, .location, .bytes
+filegrid            db confirm file                         <- checksums recorded, status STORED
+```
+
+- The id is returned on every API response as **`X-Trace-Id`**, shown in the app after each upload or
+  submission ("ID operație") and in every error message, and stored with the data (`stored_file.trace_id`,
+  `meter_reading_raw.trace_id`). The admin request page links the racordare's submission trace.
+- **Monitorizare → Urmărește o operație** (admin) opens any id in Grafana Explore. Meter messages carry
+  the device's `traceparent`, so all retries of one reading share a trace (the device span is outside FileGrid).
+- In Kubernetes the entry span comes from the ingress controller once its OpenTelemetry module is enabled;
+  without it traces start at the backend.
+
+### Alerts: the team is told when a business requirement is at risk
+
+Rules in `infra/observability/prometheus/rules/filegrid-alerts.yml`, one group per row of spec table 2.1.
+Every alert carries a `requirement` label naming the guarantee at risk:
+
+| Requirement (table 2.1) | Alerts |
+|---|---|
+| Meter readings: none lost or duplicated | `MeterReadingsNotProcessed`, `MeterBacklogGrowing`, `MeterIngestFailing`, `MeterReadingsRejected`, `MeterIngestSilent` |
+| Fault records: available immediately to dispatch | `FaultRecordsSlow`, `FaultRecordsFailing` |
+| Connection documents: personal data protected, auditable | `ConnectionDocumentsFailing`, `ConnectionDocumentsAccessDenied` |
+| Drone videos: transfer survives slow, unstable links | `DroneVideoUploadsFailing` |
+| Every category: confirmed files kept and identical | `FileIntegrityFailure`, `StorageBackendDown`, `StorageOperationsFailing`, `StorageOperationsSlow`, `BackendDown`, `BackendInstanceDown` |
+
+- **Notification:** Alertmanager e-mails the on-call address (`infra/observability/alertmanager/alertmanager.yml`,
+  template `filegrid.tmpl`): subject `[FileGrid] Cerință în pericol: <requirement> – <alert>`, then a resolved
+  mail when it clears. Locally the inbox is Mailpit (`https://localhost:8443/mailpit/`, this machine only);
+  for production point `smtp_smarthost` at the company relay or add a chat webhook receiver.
+- **In the app:** Monitorizare → *Alerte active* lists what is firing now (`GET /api/v1/admin/alerts`, read
+  from Alertmanager), refreshed every 30 s.
+- **Try it:** `docker compose stop ftp` → within about 2 minutes `StorageBackendDown` fires and the mail
+  arrives; `docker compose start ftp` → resolved mail.
 
 ## Scaling the backend with Docker Compose
 

@@ -298,6 +298,17 @@ async function handle(request: HttpRequest<unknown>, role: string | undefined): 
       matches('severity', f.severity, request) && inRange(f.occurredAt, request));
     return ok(page(found, request));
   }
+  if (route === 'GET /admin/alerts') {
+    return ok([{ name: 'StorageBackendDown', severity: 'critical', category: null, backend: 'FTP',
+      requirement: 'Categoriile stocate pe FTP: căderea unui storage nu oprește celelalte categorii și nu pierde fișiere confirmate',
+      summary: 'Storage FTP is not reachable', description: 'The FTP server does not answer the health probe.', startsAt: iso(4 * 60_000) }]);
+  }
+  if (/^POST \/fault-records\/[^/]+\/restore$/.test(route)) {
+    const fault = faults.find((f) => route.includes(f.id));
+    if (!fault) throw problem(404, 'not_found', 'No such fault record');
+    fault.restoredAt = new Date().toISOString();
+    return ok(fault);
+  }
   if (/^GET \/fault-records\/[^/]+\/file$/.test(route)) {
     return fileResponse('{"fault_record":"demo","samples":[]}', 'avarie-demo.json', 'application/json');
   }

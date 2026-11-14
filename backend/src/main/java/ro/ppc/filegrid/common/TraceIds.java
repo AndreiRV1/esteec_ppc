@@ -26,6 +26,15 @@ public class TraceIds {
         return span == null ? null : span.context().traceId();
     }
 
+    /** Adds a tag to the current span (no-op without tracing). */
+    public void tag(String key, String value) {
+        Tracer t = tracer.getIfAvailable();
+        Span span = t == null ? null : t.currentSpan();
+        if (span != null && value != null) {
+            span.tag(key, value);
+        }
+    }
+
     /** Runs {@code action} in a child span, so a request can be followed down to the storage call. */
     public <T> T inSpan(String name, Map<String, String> tags, Supplier<T> action) {
         Tracer t = tracer.getIfAvailable();

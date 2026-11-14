@@ -25,8 +25,12 @@ Requirements: Docker with Compose v2, `make` and `openssl`. No local JDK or Node
 
 ```sh
 make up      # generates .env with random secrets on first run, then starts the full stack
+make demo-setup  # data for the showcase: meters, client logins, history, faults, videos; prints the logins
 make demo    # optional: end-to-end racordare walkthrough through the TLS proxy (needs curl + jq)
 ```
+
+**Showcase:** follow [`docs/demo.md`](docs/demo.md) (about 15 minutes, every feature). The specimen documents
+for a racordare are in `demo/documents/` (regenerate with `scripts/make-demo-documents.py`).
 
 In `make up` mode, **only the TLS proxy port (`127.0.0.1:8443`) is published to the host**. Accept Caddy's local CA certificate once in the browser (or pass `--cacert` extracted from `proxy:/data/caddy/pki/authorities/local/root.crt`).
 
@@ -103,3 +107,10 @@ docs/                     API contract (api.md), platform & observability (platf
 - [`docs/platform.md`](docs/platform.md) — reverse proxy routing, OIDC issuer, Grafana SSO, dashboards, alerts, and compose scaling.
 - [`docs/racordare.md`](docs/racordare.md) & [`docs/connection-documents.md`](docs/connection-documents.md) — connection request workflow and envelope encryption design.
 - [`k8s/README.md`](k8s/README.md) — Kubernetes deployment, secret creation, static validation, and scaling/resilience proof.
+
+
+ID client
+    cl-04666393
+Parolă
+    NtFJY5jTu62ApGBp
+

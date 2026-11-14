@@ -106,7 +106,9 @@ public final class ConnectionRequestRecords {
             String sha256,
             String encryption,
             Instant storedAt,
-            Instant lastVerifiedAt) {
+            Instant lastVerifiedAt,
+            /** Trace of the submission: follow it from the proxy down to the storage write. */
+            String traceId) {
     }
 
     public record Page<T>(List<T> items, int page, int size, long total) {

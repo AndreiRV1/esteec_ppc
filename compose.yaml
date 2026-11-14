@@ -179,6 +179,7 @@ services:
       FILEGRID_OIDC_JWKS_URI: http://keycloak:8080/auth/realms/filegrid/protocol/openid-connect/certs
       # Creates applicant logins on registration (service account, manage-users only).
       FILEGRID_KEYCLOAK_URL: http://keycloak:8080/auth
+      FILEGRID_ALERTMANAGER_URL: http://alertmanager:9093
       FILEGRID_KEYCLOAK_BACKEND_SECRET: ${FILEGRID_KEYCLOAK_BACKEND_SECRET:?missing - run `make env`}
       FILEGRID_MASTER_KEY_V1: ${FILEGRID_MASTER_KEY_V1:?missing - run `make env`}
       FILEGRID_IDENTITY_PEPPER: ${FILEGRID_IDENTITY_PEPPER:?missing - run `make env`}
@@ -221,6 +222,9 @@ services:
         exec caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
     environment:
       FILEGRID_PUBLIC_URL: ${FILEGRID_PUBLIC_URL:-https://localhost:8443}
+      # Entry spans go to Tempo over the `telemetry` network (proxy and Tempo only).
+      OTEL_SERVICE_NAME: filegrid-proxy
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://tempo:4318/v1/traces
     volumes:
       - ./infra/proxy/Caddyfile:/etc/caddy/Caddyfile:ro
       - ./infra/proxy/placeholder:/srv/placeholder:ro
@@ -234,7 +238,7 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
-    networks: [edge]
+    networks: [edge, telemetry]
     logging: *default-logging
 
   # Built only when the directory exists (`make up` adds --profile frontend).
@@ -260,12 +264,12 @@ services:
     environment:
       FILEGRID_METER_API_KEY: ${FILEGRID_METER_API_KEY:?missing - run `make env`}
       SIMULATOR_SINK_URL: http://proxy:8080/api/v1/meter-readings
-      SIMULATOR_METERS_COUNT: ${SIMULATOR_METERS_COUNT:-300}
-      # Demo cadence: every meter reports each minute, 1-2 intervals per message (~3-5 msg/s
-      # for 300 meters), so dashboards fill within a minute. Real meters: 15 / 1 / 8 / 2m.
+      SIMULATOR_METERS_COUNT: ${SIMULATOR_METERS_COUNT:-2000}
+      # Demo cadence: every meter reports each minute, one interval per message (~33 msg/s
+      # for 2000 meters), so dashboards fill within a minute. Real meters: 15 / 1 / 8 / 2m.
       SIMULATOR_REPORTING_INTERVAL_MINUTES: ${SIMULATOR_INTERVAL_MINUTES:-1}
       SIMULATOR_REPORTING_BATCH_MIN: ${SIMULATOR_BATCH_MIN:-1}
-      SIMULATOR_REPORTING_BATCH_MAX: ${SIMULATOR_BATCH_MAX:-2}
+      SIMULATOR_REPORTING_BATCH_MAX: ${SIMULATOR_BATCH_MAX:-1}
       SIMULATOR_REPORTING_SEND_JITTER: ${SIMULATOR_SEND_JITTER:-50s}
     depends_on:
       proxy: { condition: service_healthy }
@@ -315,6 +319,7 @@ services:
       - --storage.path=/alertmanager
     volumes:
       - ./infra/observability/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ./infra/observability/alertmanager/filegrid.tmpl:/etc/alertmanager/filegrid.tmpl:ro
       - alertmanager-data:/alertmanager
     networks: [observability]
     logging: *default-logging
@@ -363,7 +368,7 @@ services:
     volumes:
       - ./infra/observability/tempo/tempo.yml:/etc/tempo/tempo.yml:ro
       - tempo-data:/var/tempo
-    networks: [observability]
+    networks: [observability, telemetry]
     logging: *default-logging
 
   grafana:
@@ -420,6 +425,8 @@ networks:
   backend:
   # metrics, logs, traces
   observability:
+  # entry spans only: proxy -> Tempo (the proxy stays off the observability network)
+  telemetry:
 
 volumes:
   pg-data:

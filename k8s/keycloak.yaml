@@ -79,6 +79,11 @@ spec:
                 secretKeyRef:
                   name: filegrid-secrets
                   key: GRAFANA_OAUTH_CLIENT_SECRET
+            - name: FILEGRID_KEYCLOAK_BACKEND_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: filegrid-secrets
+                  key: FILEGRID_KEYCLOAK_BACKEND_SECRET
           volumeMounts:
             - name: realm-import
               mountPath: /opt/keycloak/data/import

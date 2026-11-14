@@ -12,6 +12,11 @@
 }
 
 (backend) {
+	# The first span of every API operation: it starts the trace (W3C traceparent) that the
+	# backend continues down to the storage call, all exported to Tempo.
+	tracing {
+		span "proxy {http.request.method} {http.request.uri.path}"
+	}
 	reverse_proxy {
 		dynamic a {
 			name {$BACKEND_HOST:backend}

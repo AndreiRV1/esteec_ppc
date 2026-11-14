@@ -53,6 +53,7 @@ configMapGenerator:
       disableNameSuffixHash: true
     files:
       - ../infra/observability/alertmanager/alertmanager.yml
+      - ../infra/observability/alertmanager/filegrid.tmpl
   - name: loki-config
     options:
       disableNameSuffixHash: true

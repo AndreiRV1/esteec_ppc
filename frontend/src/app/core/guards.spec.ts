@@ -18,10 +18,10 @@ function runGuard(userRoles: Role[], routeRoles: Role[]): boolean | string {
 }
 
 describe('roleGuard', () => {
-  it('lets a user into a route that lists one of their roles, and lets admin into all routes', () => {
+  it('lets a user into a route that lists one of their roles; admin only where listed', () => {
     expect(runGuard(['admin'], ['admin'])).toBe(true);
-    expect(runGuard(['admin'], ['employee'])).toBe(true);
-    expect(runGuard(['admin'], ['client'])).toBe(true);
+    expect(runGuard(['admin'], ['employee', 'admin'])).toBe(true);
+    expect(runGuard(['admin'], ['client'])).toBe('/admin/connection-requests');
     expect(runGuard(['client'], ['employee', 'client'])).toBe(true);
   });
 

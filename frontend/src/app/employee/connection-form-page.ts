@@ -5,6 +5,7 @@ import { ApiService, problemMessage } from '../core/api';
 import { AuthService } from '../core/auth';
 import { COUNTIES, LabelPipe, toDateInput } from '../core/format';
 import { ConnectionRequestForm, Registration, RequestSummary } from '../core/models';
+import { OperationId } from '../ui/operation-id';
 
 const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
 type Slot = 'cerereRacordare' | 'actIdentitate' | 'aviz';
@@ -24,7 +25,7 @@ const emptyForm = (): ConnectionRequestForm => ({
  * without an account (the answer then carries their new client login).
  */
 @Component({
-  imports: [FormsModule, RouterLink, LabelPipe],
+  imports: [FormsModule, RouterLink, LabelPipe, OperationId],
   template: `
     <div class="page">
       <div class="intro">
@@ -57,6 +58,7 @@ const emptyForm = (): ConnectionRequestForm => ({
         <div class="notice success" role="status">
           <p><strong>Cererea a fost depusă.</strong> Este în așteptarea unui administrator.</p>
           <p>Număr cerere: <span class="data">{{ request.clientId }}</span> · {{ request.locality }}, {{ request.county }} ({{ request.region | label }})</p>
+          <fg-operation />
         </div>
         <div class="row">
           <button type="button" (click)="reset()">Depune altă cerere</button>
@@ -162,6 +164,13 @@ const emptyForm = (): ConnectionRequestForm => ({
 
           @if (error(); as message) { <p class="notice error" role="alert">{{ message }}</p> }
           <div class="row">
+            @if (publicForm()) {
+              <label class="check consent">
+                <input type="checkbox" name="consent" required />
+                <span>Am citit <a routerLink="/privacy" target="_blank">Politica de confidențialitate</a> și accept
+                  <a routerLink="/terms" target="_blank">Termenii și condițiile</a>.</span>
+              </label>
+            }
             <button type="submit" [disabled]="sending()">{{ sending() ? 'Se trimite…' : 'Depune cererea' }}</button>
           </div>
         </form>
@@ -178,6 +187,7 @@ const emptyForm = (): ConnectionRequestForm => ({
       display: grid; place-items: center; background: var(--primary-tint); color: var(--primary-dark); font-weight: 700;
     }
     .steps legend + * { clear: both; }
+    .consent { flex: 1 0 100%; }
     .credentials dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 12px 0; }
     .credentials dd { margin: 0; font-size: 1.15rem; font-weight: 600; user-select: all; }
     .steps > .notice { margin: 20px 24px 0; }

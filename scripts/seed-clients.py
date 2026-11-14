@@ -88,13 +88,21 @@ def main():
          "(SELECT 1 FROM filegrid.customer_account a WHERE a.meter_id = m.id) ORDER BY m.id LIMIT 1 "
          "ON CONFLICT DO NOTHING;")
 
+    # One row per login, the latest password wins (the import above resets passwords of existing logins).
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    new_file = not OUT.exists()
-    with open(os.open(OUT, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600), "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=["username", "password", "meter_id", "region", "county", "locality"])
-        if new_file:
-            writer.writeheader()
-        writer.writerows(clients)
+    fields = ["username", "password", "meter_id", "region", "county", "locality"]
+    rows = {}
+    if OUT.exists():
+        with open(OUT, newline="", encoding="utf-8") as f:
+            rows = {r["username"]: r for r in csv.DictReader(f)}
+    rows.update({c["username"]: c for c in clients})
+    # Drop logins whose account is gone (e.g. after the database was reset).
+    existing = set(psql("SELECT username FROM filegrid.customer_account;").split())
+    rows = {u: r for u, r in rows.items() if u in existing}
+    with open(os.open(OUT, os.O_WRONLY | os.O_TRUNC | os.O_CREAT, 0o600), "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fields)
+        writer.writeheader()
+        writer.writerows(sorted(rows.values(), key=lambda r: r["username"]))
     print(f"Created {len(clients)} customer accounts. Credentials: {OUT.relative_to(ROOT)}")
     print(f"Example login: {clients[0]['username']} (meter {clients[0]['meter_id']}, {clients[0]['county']})")
 
