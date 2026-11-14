@@ -23,6 +23,7 @@ chown "$FTP_USER:$FTP_USER" "$FILES_DIR" "$FILES_DIR"/*
 chmod 0750 "$FILES_DIR" "$FILES_DIR"/*
 
 cp /etc/vsftpd/vsftpd.conf "$RUNTIME_CONF"
+printf "pasv_min_port=%s\npasv_max_port=%s\n" "${FTP_PASV_MIN_PORT:-21100}" "${FTP_PASV_MAX_PORT:-21119}" >> "$RUNTIME_CONF"
 if [ -n "${FTP_PASV_ADDRESS:-}" ]; then
   printf 'pasv_address=%s\n' "$FTP_PASV_ADDRESS" >> "$RUNTIME_CONF"
 fi
