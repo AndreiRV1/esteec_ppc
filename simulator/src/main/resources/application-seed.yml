@@ -1,0 +1,6 @@
+# Writes the meter registry SQL (simulator.seed-file) and exits.
+spring:
+  main:
+    web-application-type: none
+simulator:
+  mode: seed

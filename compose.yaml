@@ -1,9 +1,9 @@
-# FileGrid storage layer: PostgreSQL, MinIO (S3) and vsftpd (FTP).
+# FileGrid: backend API, Keycloak (auth) and the three storages:
+# PostgreSQL, MinIO (S3) and vsftpd (FTP).
 #
-# Nothing here publishes a port: the storages are reachable only from the
-# `backend` network, i.e. through FileGrid. For local development (backend
-# running on the host) layer compose.dev.yaml on top, which binds the ports
-# to 127.0.0.1 only. See README.md.
+# Only the backend and Keycloak publish ports (on 127.0.0.1). The storages are
+# reachable solely from the `backend` network, i.e. through FileGrid. For
+# running the backend from an IDE, layer compose.dev.yaml on top (see README.md).
 name: filegrid
 
 x-logging: &default-logging
@@ -20,9 +20,10 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-filegrid}
       POSTGRES_USER: ${POSTGRES_SUPERUSER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:?missing - run `make env`}
-      # Consumed by infra/postgres/initdb/01-roles.sh on first start only.
+      # Consumed by infra/postgres/initdb/*.sh on first start only.
       FILEGRID_DB_MIGRATOR_PASSWORD: ${FILEGRID_DB_MIGRATOR_PASSWORD:?missing - run `make env`}
       FILEGRID_DB_APP_PASSWORD: ${FILEGRID_DB_APP_PASSWORD:?missing - run `make env`}
+      KEYCLOAK_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?missing - run `make env`}
     volumes:
       # PG 18 images keep data under /var/lib/postgresql/<major>/docker.
       - pg-data:/var/lib/postgresql
@@ -111,6 +112,81 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    networks: [backend]
+    logging: *default-logging
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.8.2@sha256:c68e286cacd87b942ac1939a0a1481461109d6acd3a57dc496969a319a76bbf0
+    restart: unless-stopped
+    # Imports infra/keycloak/realm/*.json if the realm does not exist yet (never overwrites).
+    command: ["start", "--import-realm"]
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?missing - run `make env`}
+      # Public URL: the token issuer. Backchannel (backend -> keycloak:8080) stays internal.
+      KC_HOSTNAME: http://localhost:${KEYCLOAK_HOST_PORT:-8180}
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      # TLS is terminated by the reverse proxy that will front FileGrid.
+      KC_HTTP_ENABLED: "true"
+      KC_HEALTH_ENABLED: "true"
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?missing - run `make env`}
+      # Placeholders in the realm import file.
+      FILEGRID_ADMIN_PASSWORD: ${FILEGRID_ADMIN_PASSWORD:?missing - run `make env`}
+      FILEGRID_DEMO_CLIENT_PASSWORD: ${FILEGRID_DEMO_CLIENT_PASSWORD:?missing - run `make env`}
+    volumes:
+      - ./infra/keycloak/realm:/opt/keycloak/data/import:ro
+    ports:
+      - "127.0.0.1:${KEYCLOAK_HOST_PORT:-8180}:8080"
+    healthcheck:
+      # No curl in the image: plain HTTP over bash's /dev/tcp to the management port.
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && grep -q '\"UP\"' <&3"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [backend]
+    logging: *default-logging
+
+  backend:
+    build: ./backend
+    image: filegrid/backend:local
+    restart: unless-stopped
+    environment:
+      FILEGRID_DB_HOST: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-filegrid}
+      FILEGRID_DB_APP_PASSWORD: ${FILEGRID_DB_APP_PASSWORD:?missing - run `make env`}
+      FILEGRID_S3_ENDPOINT: http://minio:9000
+      FILEGRID_S3_ACCESS_KEY: ${FILEGRID_S3_ACCESS_KEY:?missing - run `make env`}
+      FILEGRID_S3_SECRET_KEY: ${FILEGRID_S3_SECRET_KEY:?missing - run `make env`}
+      FILEGRID_FTP_HOST: ftp
+      FILEGRID_FTP_PORT: "21"
+      FTP_USER: ${FTP_USER:?missing - run `make env`}
+      FTP_PASSWORD: ${FTP_PASSWORD:?missing - run `make env`}
+      FILEGRID_OIDC_ISSUER: http://localhost:${KEYCLOAK_HOST_PORT:-8180}/realms/filegrid
+      FILEGRID_OIDC_JWKS_URI: http://keycloak:8080/realms/filegrid/protocol/openid-connect/certs
+      FILEGRID_MASTER_KEY_V1: ${FILEGRID_MASTER_KEY_V1:?missing - run `make env`}
+      FILEGRID_IDENTITY_PEPPER: ${FILEGRID_IDENTITY_PEPPER:?missing - run `make env`}
+      FILEGRID_METER_API_KEY: ${FILEGRID_METER_API_KEY:?missing - run `make env`}
+      # JSON logs, ready for Loki.
+      LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+    ports:
+      - "127.0.0.1:${BACKEND_HOST_PORT:-8080}:8080"
+      # 8081 (actuator: health, prometheus) is deliberately not published.
+    depends_on:
+      postgres:
+        condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
+      minio-init:
+        condition: service_completed_successfully
+      ftp:
+        condition: service_healthy
     networks: [backend]
     logging: *default-logging
 

@@ -1,0 +1,6 @@
+# Peak day: 10x the normal message rate. Replays the last 24 h at 10x speed
+# (catches up with the wall clock after ~2 h 40 min, then runs in real time).
+simulator:
+  clock:
+    start: -P1D
+    speed: 10

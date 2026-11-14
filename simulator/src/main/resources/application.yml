@@ -1,0 +1,71 @@
+spring:
+  application:
+    name: meter-simulator
+  main:
+    banner-mode: off
+
+server:
+  port: ${SIMULATOR_PORT:8090}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+  metrics:
+    tags:
+      application: meter-simulator
+
+# Every key can be overridden with an env var (SIMULATOR_METERS_COUNT=50000)
+# or a flag (--simulator.meters.count=50000). See simulator/README.md.
+simulator:
+  mode: run                 # run | seed (write the meter registry SQL and exit)
+  seed: 42                  # same seed + meters.* = same fleet (and seed file)
+  meters:
+    count: 10000
+    region-weights:
+      MUNTENIA: 0.5
+      BANAT: 0.3
+      DOBROGEA: 0.2
+  clock:
+    start: now              # now | ISO instant | offset such as -P1D
+    speed: 1                # simulated seconds per real second
+    allow-future: false     # false: never run ahead of the wall clock
+  reporting:
+    interval-minutes: 15
+    batch-min: 1            # intervals per message, picked uniformly in [min, max]
+    batch-max: 8
+    send-jitter: 2m         # meters send up to this long after the boundary
+    max-backlog-intervals: 480   # cap per message when flushing a backlog (~45 KB)
+  sink:
+    type: http              # http | stdout
+    url: http://localhost:8080/api/v1/meter-readings
+    api-key: ${FILEGRID_METER_API_KEY:}
+    max-in-flight: 64
+    max-pending: 20000      # generation pauses when this many messages are undelivered
+    connect-timeout: 2s
+    request-timeout: 10s
+  retry:
+    max-attempts: 0         # 0 = retry until delivered
+    initial-backoff: 500ms
+    max-backoff: 1m
+  anomalies:
+    max-delay: 2h           # upper bound for late / duplicate / resent delays
+    rates:                  # probability per message, 0..1
+      duplicate: 0.02
+      race-duplicate: 0.005
+      resent-intervals: 0.005
+      late: 0.02
+      future-timestamp: 0.002
+      misaligned-timestamp: 0.005
+      gap: 0.02
+      sequence-reset: 0.001
+      malformed: 0.005
+      invalid-value: 0.003
+      unknown-meter: 0.002
+      wrong-region: 0.002
+      voltage-out-of-range: 0.01
+      consumption-spike: 0.003
+  ledger:
+    path: ""                # JSONL outcome of every message; empty = off
+  seed-file: meters.sql
