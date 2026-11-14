@@ -70,6 +70,9 @@ export interface Fault {
   description?: string | null;
   sizeBytes?: number;
   sha256?: string;
+  reportedBy?: string;
+  createdAt?: string;
+  file?: StoredFileInfo;
 }
 
 export interface FaultMetadata {
@@ -93,6 +96,16 @@ export interface FaultFilter {
   to?: string;
   page?: number;
   size?: number;
+}
+
+/** The stored file behind a record, as listed by the API. */
+export interface StoredFileInfo {
+  fileId: string;
+  filename: string;
+  contentType: string;
+  sizeBytes: number;
+  sha256: string;
+  backend: StorageBackend;
 }
 
 /** Returned when a file-backed record is created. */
@@ -138,6 +151,8 @@ export interface DroneVideo extends VideoMetadata {
   sha256?: string;
   filename?: string;
   createdAt?: string;
+  uploadedBy?: string;
+  file?: StoredFileInfo;
 }
 
 export interface VideoFilter {
@@ -277,12 +292,12 @@ export type AllDataCategory = 'METER_READING' | FileCategory;
 
 export interface BackendCandidateMetrics {
   backend: StorageBackend;
-  p50Ms: number;
-  p95Ms: number;
-  p99Ms: number;
-  throughputMbps: number;
-  errorRatePercent: number;
-  memoryFootprintMb: number;
+  p50Ms: number | null;
+  p95Ms: number | null;
+  p99Ms: number | null;
+  throughputMbps: number | null;
+  errorRatePercent: number | null;
+  memoryFootprintMb: number | null;
   verdict: string;
 }
 
@@ -301,11 +316,11 @@ export interface DayCategoryMetrics {
   peakFilesPerDay: number;
   normalVolumeMb: number;
   peakVolumeMb: number;
-  normalP95Ms: number;
-  peakP95Ms: number;
+  normalP95Ms: number | null;
+  peakP95Ms: number | null;
   normalErrorRatePercent: number;
   peakErrorRatePercent: number;
-  resumedOrRetried: number;
+  resumedOrRetried: number | null;
   slaMet: boolean;
 }
 
@@ -315,11 +330,11 @@ export interface RegionalGridInsight {
   readings24h: number;
   anomalies24h: number;
   duplicatesFiltered24h: number;
-  avgVoltageV: number;
+  avgVoltageV: number | null;
   peakLoadWindow: string;
   faults30d: number;
   activeFaults: number;
-  avgRestoreMinutes: number;
+  avgRestoreMinutes: number | null;
   affectedCustomers30d: number;
   hotspotZone: string;
   hotspotSubstation: string;

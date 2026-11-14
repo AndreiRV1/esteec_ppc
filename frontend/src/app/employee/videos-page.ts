@@ -160,7 +160,7 @@ type Phase = 'idle' | 'hashing' | 'uploading' | 'pausing' | 'paused' | 'finishin
                       <td data-label="Durată">{{ duration(video.durationSeconds) }}</td>
                       <td>
                         <button class="secondary small" type="button" [disabled]="downloading()" (click)="download(video)">
-                          Descarcă @if (video.sizeBytes) { ({{ video.sizeBytes | bytes }}) }
+                          Descarcă @if (video.file?.sizeBytes ?? video.sizeBytes; as size) { ({{ size | bytes }}) }
                         </button>
                       </td>
                     </tr>

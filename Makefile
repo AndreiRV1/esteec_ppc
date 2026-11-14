@@ -19,6 +19,10 @@ MAVEN := docker run --rm --add-host=host.docker.internal:host-gateway -v "$(CURD
 SIM_IMAGE := filegrid/meter-simulator:local
 # Extra simulator flags, shared by `seed` and `sim` so both use the same fleet.
 SIM_ARGS  ?=
+# Fleet size for `seed`, `sim` and the always-on simulator service; all three must agree.
+export SIMULATOR_METERS_COUNT ?= 300
+# `make up SIMULATOR=0` starts the stack without simulated meter traffic.
+SIMULATOR ?= 1
 
 .DEFAULT_GOAL := help
 .PHONY: help env up dev down ps logs psql migrate test demo clean \
@@ -43,10 +47,12 @@ up: env ## Start everything behind the TLS proxy on https://localhost:8443 (noth
 	$(call start,$(COMPOSE))
 	$(COMPOSE) $(PROFILES) up -d --build --no-deps --wait $(PLATFORM) $(FRONTEND)
 	$(COMPOSE) up -d --build --no-deps --wait backend
+	$(if $(filter 1,$(SIMULATOR)),$(COMPOSE) --profile simulator up -d --build --no-deps simulator)
 	@url=$(PUBLIC_URL); echo "FileGrid is up (local CA certificate: accept it once in the browser):"; \
 	echo "  App      $$url/"; echo "  API docs $$url/swagger-ui.html"; \
 	echo "  Login    $$url/auth/realms/filegrid/account/"; \
-	echo "  Grafana  $$url/grafana/   (admin@filegrid.local)"; echo "  Alerts   $$url/mailpit/"
+	echo "  Grafana  $$url/grafana/   (admin@filegrid.local)"; echo "  Alerts   $$url/mailpit/"; \
+	echo "First run: \`make seed seed-clients\` loads the meters the simulator reports for, and client logins."
 
 dev: env ## Start everything except the backend, with storages on 127.0.0.1 (run the backend from your IDE)
 	$(call start,$(DEV))
@@ -55,7 +61,7 @@ dev: env ## Start everything except the backend, with storages on 127.0.0.1 (run
 	echo "Start the backend with: cd backend && ./mvnw spring-boot:run   (API then at $$url/api/v1)"
 
 down: ## Stop the stack (keeps data)
-	$(DEV) --profile backend-in-docker --profile frontend down
+	$(DEV) --profile backend-in-docker --profile frontend --profile simulator down
 
 ps: ## Show service status
 	$(COMPOSE) ps -a
@@ -76,7 +82,7 @@ demo: ## Walk through a racordare end to end against the running stack (needs `m
 	FILEGRID_ENV_FILE=$(ENV_FILE) ./scripts/demo-racordare.sh
 
 clean: ## Stop the stack and DELETE all data volumes
-	$(DEV) --profile backend-in-docker --profile frontend down -v
+	$(DEV) --profile backend-in-docker --profile frontend --profile simulator down -v
 
 gen-data: ## Generate regional fault JSONs (1-10 MB) and drone MP4 videos (GEN_ARGS=...)
 	python3 backend/fault_videos/fault_videos.py generate $(GEN_ARGS)
@@ -101,7 +107,7 @@ sim-build: ## Build the meter simulator image
 
 seed: $(ENV_FILE) sim-build ## Generate db/seed/meters.sql from the simulator fleet and load it
 	@mkdir -p db/seed
-	docker run --rm --user "$$(id -u):$$(id -g)" -v "$(CURDIR)/db/seed:/out" $(SIM_IMAGE) \
+	docker run --rm --user "$$(id -u):$$(id -g)" -e SIMULATOR_METERS_COUNT -v "$(CURDIR)/db/seed:/out" $(SIM_IMAGE) \
 	  --spring.profiles.active=seed --simulator.seed-file=/out/meters.sql $(SIM_ARGS)
 	$(COMPOSE) exec -T postgres sh -c 'PGPASSWORD="$$FILEGRID_DB_MIGRATOR_PASSWORD" psql -q -v ON_ERROR_STOP=1 -h 127.0.0.1 -U filegrid_migrator -d "$$POSTGRES_DB"' < db/seed/meters.sql
 	@echo "Meters loaded into filegrid.meter."
@@ -110,12 +116,12 @@ seed-clients: $(ENV_FILE) ## Create demo customer logins for seeded meters (CLIE
 	FILEGRID_ENV_FILE=$(ENV_FILE) ./scripts/seed-clients.py $(CLIENTS)
 
 sim: $(ENV_FILE) sim-build ## Run the meter simulator through the proxy (SIM_ARGS=...)
-	@key=$$(sed -n 's/^FILEGRID_METER_API_KEY=//p' $(ENV_FILE)); \
+	@key=$$(sed -n 's/^FILEGRID_METER_API_KEY=//p' $(ENV_FILE) | tail -n1); \
 	[ -n "$$key" ] || { echo "FILEGRID_METER_API_KEY is missing from $(ENV_FILE) (see .env.example)" >&2; exit 1; }; \
 	proj=$${COMPOSE_PROJECT_NAME:-filegrid}; \
 	FILEGRID_METER_API_KEY="$$key" docker run --rm --init --name "$$proj-meter-simulator" \
 	  --network "$${proj}_edge" --add-host=host.docker.internal:host-gateway \
 	  -p "127.0.0.1:$${SIMULATOR_PORT:-8090}:8090" \
-	  -e FILEGRID_METER_API_KEY \
+	  -e FILEGRID_METER_API_KEY -e SIMULATOR_METERS_COUNT \
 	  -e SIMULATOR_SINK_URL="$${SIMULATOR_SINK_URL:-http://proxy:8080/api/v1/meter-readings}" \
 	  $(SIM_IMAGE) $(SIM_ARGS)

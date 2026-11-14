@@ -91,12 +91,12 @@ type SectionTab = 'storage' | 'peak' | 'grid';
                             <span class="badge LOW optimal">Optim</span>
                           }
                         </td>
-                        <td data-label="p50 (ms)" class="data">{{ c.p50Ms | number: '1.0-1' }} ms</td>
-                        <td data-label="p95 (ms)" class="data">{{ c.p95Ms | number: '1.0-1' }} ms</td>
-                        <td data-label="p99 (ms)" class="data">{{ c.p99Ms | number: '1.0-1' }} ms</td>
-                        <td data-label="Throughput" class="data">{{ c.throughputMbps | number: '1.1-1' }} MB/s</td>
-                        <td data-label="Rată erori" class="data">{{ c.errorRatePercent | number: '1.2-2' }}%</td>
-                        <td data-label="Memorie RAM" class="data">{{ c.memoryFootprintMb | number: '1.0-0' }} MB</td>
+                        <td data-label="p50 (ms)" class="data">{{ n(c.p50Ms, ' ms') }}</td>
+                        <td data-label="p95 (ms)" class="data">{{ n(c.p95Ms, ' ms') }}</td>
+                        <td data-label="p99 (ms)" class="data">{{ n(c.p99Ms, ' ms') }}</td>
+                        <td data-label="Throughput" class="data">{{ n(c.throughputMbps, ' MB/s') }}</td>
+                        <td data-label="Rată erori" class="data">{{ n(c.errorRatePercent, '%', 2) }}</td>
+                        <td data-label="Memorie RAM" class="data">{{ n(c.memoryFootprintMb, ' MB', 0) }}</td>
                         <td data-label="Concluzie tehnică">{{ c.verdict }}</td>
                       </tr>
                     }
@@ -125,9 +125,9 @@ type SectionTab = 'storage' | 'peak' | 'grid';
             </div>
             <div class="card kpi">
               <h3 class="kpi-label">Reziliență pe conexiuni degradate</h3>
-              <p class="kpi-value data">{{ totalResumed() | number }} părți reluate</p>
+              <p class="kpi-value data">{{ totalResumed() | number }} mesaje retrimise oprite</p>
               <p class="muted">
-                Părțile eșuate pe rețea instabilă se reîncearcă automat cu backoff exponențial, fără pierdere sau dublare.
+                Mesajele retrimise de contoare (aceeași citire) sunt recunoscute și nu se numără de două ori.
               </p>
             </div>
           </div>
@@ -153,14 +153,14 @@ type SectionTab = 'storage' | 'peak' | 'grid';
                       <div class="bar-track">
                         <div class="bar-fill normal" [style.width.%]="latencyPct(item.normalP95Ms, item)"></div>
                       </div>
-                      <span class="data">{{ item.normalP95Ms }} ms</span>
+                      <span class="data">{{ n(item.normalP95Ms, ' ms', 0) }}</span>
                     </div>
                     <div class="bar-row">
                       <span class="muted">Vârf 10× (p95)</span>
                       <div class="bar-track">
                         <div class="bar-fill peak" [style.width.%]="latencyPct(item.peakP95Ms, item)"></div>
                       </div>
-                      <span class="data">{{ item.peakP95Ms }} ms</span>
+                      <span class="data">{{ n(item.peakP95Ms, ' ms', 0) }}</span>
                     </div>
                   </div>
                   <p class="muted small-note">
@@ -195,12 +195,12 @@ type SectionTab = 'storage' | 'peak' | 'grid';
                         {{ row.normalVolumeMb | number: '1.0-0' }} MB → {{ row.peakVolumeMb | number: '1.0-0' }} MB
                       </td>
                       <td data-label="Latență p95" class="data">
-                        {{ row.normalP95Ms }} ms → {{ row.peakP95Ms }} ms
+                        {{ n(row.normalP95Ms, ' ms', 0) }} → {{ n(row.peakP95Ms, ' ms', 0) }}
                       </td>
                       <td data-label="Rată erori finală" class="data">
                         {{ row.normalErrorRatePercent | number: '1.2-2' }}% → {{ row.peakErrorRatePercent | number: '1.2-2' }}%
                       </td>
-                      <td data-label="Reîncercări / Resume" class="data">{{ row.resumedOrRetried | number }}</td>
+                      <td data-label="Reîncercări / Resume" class="data">{{ n(row.resumedOrRetried, '', 0) }}</td>
                     </tr>
                   }
                 </tbody>
@@ -237,16 +237,16 @@ type SectionTab = 'storage' | 'peak' | 'grid';
                   <dd class="data">{{ reg.readings24h | number }}</dd>
                   <dt>Anomalii detectate</dt>
                   <dd class="data warn-text">{{ reg.anomalies24h | number }} (tensiune / vârf consum)</dd>
-                  <dt>Dubluri oprite</dt>
-                  <dd class="data">{{ reg.duplicatesFiltered24h | number }} (idempotență)</dd>
+                  <dt>Mesaje respinse</dt>
+                  <dd class="data">{{ reg.duplicatesFiltered24h | number }} (validare)</dd>
                   <dt>Tensiune medie</dt>
-                  <dd class="data">{{ reg.avgVoltageV | number: '1.1-1' }} V</dd>
+                  <dd class="data">{{ n(reg.avgVoltageV, ' V') }}</dd>
                   <dt>Vârf de sarcină</dt>
                   <dd class="data">{{ reg.peakLoadWindow }}</dd>
                   <dt>Avarii (30 zile)</dt>
                   <dd class="data">{{ reg.faults30d }} ({{ reg.affectedCustomers30d | number }} clienți)</dd>
                   <dt>Timp mediu remediere</dt>
-                  <dd class="data">{{ reg.avgRestoreMinutes }} min</dd>
+                  <dd class="data">{{ n(reg.avgRestoreMinutes, ' min', 0) }}</dd>
                   <dt>Zonă vulnerabilă</dt>
                   <dd><strong>{{ reg.hotspotZone }}</strong> ({{ reg.hotspotSubstation }})</dd>
                   <dt>Cauză dominantă</dt>
@@ -297,7 +297,7 @@ export class StatisticsPage {
   protected readonly stats = new Loader<SystemStatistics>();
 
   protected readonly totalResumed = computed(() =>
-    (this.stats.data()?.normalVsPeak ?? []).reduce((sum, r) => sum + r.resumedOrRetried, 0),
+    (this.stats.data()?.normalVsPeak ?? []).reduce((sum, r) => sum + (r.resumedOrRetried ?? 0), 0),
   );
 
   constructor() {
@@ -308,8 +308,15 @@ export class StatisticsPage {
     void this.stats.run(() => this.api.statistics());
   }
 
-  protected latencyPct(value: number, row: DayCategoryMetrics): number {
-    const max = Math.max(row.normalP95Ms, row.peakP95Ms, 1);
+  /** A measured value with its unit, or a dash when the backend has not measured it yet. */
+  protected n(value: number | null | undefined, unit: string, digits = 1): string {
+    if (value === null || value === undefined) return '—';
+    return value.toLocaleString('ro-RO', { maximumFractionDigits: digits }) + unit;
+  }
+
+  protected latencyPct(value: number | null, row: DayCategoryMetrics): number {
+    if (value === null) return 0;
+    const max = Math.max(row.normalP95Ms ?? 0, row.peakP95Ms ?? 0, 1);
     return Math.min(100, Math.max(6, Math.round((value / max) * 100)));
   }
 }

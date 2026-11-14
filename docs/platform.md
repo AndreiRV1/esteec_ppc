@@ -21,7 +21,7 @@
 | Grafana (`/grafana/`) | `https://localhost:8443/grafana/` | `https://localhost:8443/grafana/` |
 | Alert inbox (`/mailpit/`) | `https://localhost:8443/mailpit/` | `https://localhost:8443/mailpit/` |
 | PostgreSQL / MinIO / FTP | *internal only* | `127.0.0.1:5432`, `127.0.0.1:9000`/`:9001`, `127.0.0.1:2121` (`21100-21119`) |
-| Meter simulator sink (`make sim`) | `http://proxy:8080/api/v1/meter-readings` (on `edge` network) | `http://proxy:8080/api/v1/meter-readings` (forwarded to host `:8080`) |
+| Meter simulator sink (service `simulator`, started by `make up`; `make sim`) | `http://proxy:8080/api/v1/meter-readings` (on `edge` network) | `http://proxy:8080/api/v1/meter-readings` (forwarded to host `:8080`) |
 
 ## OIDC token issuer
 

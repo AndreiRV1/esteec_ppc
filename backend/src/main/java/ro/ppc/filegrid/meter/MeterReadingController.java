@@ -104,6 +104,7 @@ public class MeterReadingController {
             record(sample, "error");
             throw e;
         }
+        if (!stored) metrics.counter("filegrid.meter.raw", "status", "duplicate").increment();
         return stored
                 ? ResponseEntity.accepted().body(Map.of("status", "ACCEPTED"))
                 : ResponseEntity.ok(Map.of("status", "DUPLICATE"));
