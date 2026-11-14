@@ -239,6 +239,8 @@ services:
     build: ./frontend
     image: filegrid/frontend:local
     restart: unless-stopped
+    environment:
+      KEYCLOAK_URL: ${FILEGRID_PUBLIC_URL:-https://localhost:8443}/auth
     networks: [edge]
     logging: *default-logging
 

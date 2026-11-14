@@ -15,17 +15,22 @@ import { Status } from '../ui/status';
   imports: [FormsModule, RouterLink, DatePipe, DecimalPipe, LabelPipe, BytesPipe, Status],
   template: `
     <div class="page">
-      <p><a routerLink="/admin/connection-requests">← Toate cererile</a></p>
+      <p><a class="back" routerLink="/admin/connection-requests"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg>Toate cererile</a></p>
       <fg-status [of]="detail" />
       @if (detail.data(); as d) {
-        <div class="page-head">
-          <h1>Cerere de racordare</h1>
-          <span class="badge {{ d.request.status }}">{{ d.request.status | label }}</span>
+        <div class="intro">
+          <div class="title">
+            <h1>{{ d.request.requestType | label }}, {{ d.request.locality }}</h1>
+            <span class="badge {{ d.request.status }}">{{ d.request.status | label }}</span>
+          </div>
+          <p>
+            Depusă {{ d.request.createdAt | date: 'd MMM y, HH:mm' }} de {{ d.applicant.fullName }}.
+            Nr. <span class="data">{{ d.request.clientId }}</span>
+          </p>
         </div>
-        <p class="muted">
-          <span class="data">{{ d.request.clientId }}</span> · depusă {{ d.request.createdAt | date: 'd MMM y, HH:mm' }}
-        </p>
 
+        <div class="layout">
+        <div class="main">
         <div class="grid-2">
           <section class="card" aria-labelledby="solicitant">
             <h2 id="solicitant">Solicitant</h2>
@@ -93,14 +98,16 @@ import { Status } from '../ui/status';
           </section>
         }
 
-        <section class="card" aria-labelledby="decizie">
+
+        </div>
+        <aside class="card decision" aria-labelledby="decizie">
           <h2 id="decizie">Decizie</h2>
           @if (d.request.status === 'PENDING') {
             <label>Motiv (obligatoriu la respingere)
               <textarea [(ngModel)]="reason" maxlength="1000" #reasonBox></textarea>
             </label>
             @if (decisionError(); as message) { <p class="notice error" role="alert">{{ message }}</p> }
-            <div class="row">
+            <div class="actions">
               <button type="button" [disabled]="busy()" (click)="decide('ACCEPTED')">Aprobă cererea</button>
               <button class="danger" type="button" [disabled]="busy()" (click)="decide('REJECTED') || reasonBox.focus()">Respinge cererea</button>
             </div>
@@ -112,12 +119,24 @@ import { Status } from '../ui/status';
             </p>
             @if (d.request.statusReason) { <p><strong>Motiv:</strong> {{ d.request.statusReason }}</p> }
           }
-        </section>
+        </aside>
+        </div>
       }
     </div>
   `,
   styles: `
     .sr { position: absolute; left: -9999px; }
+    .back { display: inline-flex; align-items: center; gap: 4px; font-weight: 500; text-decoration: none; }
+    .back svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .title { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+    .layout { display: grid; gap: 24px; grid-template-columns: minmax(0, 1fr); align-items: start; }
+    .main { display: grid; gap: 24px; grid-template-columns: minmax(0, 1fr); }
+    .actions { display: grid; gap: 10px; }
+    @media (min-width: 1080px) {
+      .layout { grid-template-columns: minmax(0, 1fr) 300px; }
+      .decision { position: sticky; top: 24px; }
+      .main .grid-2 { grid-template-columns: minmax(0, 1fr); }
+    }
     .small-text { font-size: 0.9rem; align-self: center; }
     ul { margin: 0; padding-left: 20px; display: grid; gap: 8px; }
     li .badge { margin-left: 8px; }

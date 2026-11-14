@@ -86,17 +86,17 @@ function niceStep(max: number): number {
     svg { display: block; touch-action: pan-y; }
     svg:focus-visible { outline-offset: 4px; }
     .grid { stroke: var(--line); stroke-width: 1; }
-    .axis { fill: var(--ink-muted); font: 500 11px var(--font-data); }
-    .bar { fill: var(--chart); }
+    .axis { fill: var(--ink-muted); font: 500 12px var(--font-body); font-variant-numeric: tabular-nums; }
+    .bar { fill: var(--chart); rx: 2px; }
     .bar.active { fill: var(--primary-dark); }
-    .anomaly { fill: #b45309; stroke: var(--card); stroke-width: 2; paint-order: stroke; }
-    .mark { color: #b45309; }
+    .anomaly { fill: #c2410c; stroke: var(--card); stroke-width: 2; paint-order: stroke; }
+    .mark { color: #c2410c; }
     .tip {
       position: absolute; transform: translate(-50%, calc(-100% - 10px)); pointer-events: none;
-      background: var(--ink); color: #fff; border-radius: var(--radius); padding: 8px 10px;
+      background: var(--ink); color: #fff; border-radius: var(--radius); padding: 8px 12px; box-shadow: var(--shadow);
       display: grid; gap: 2px; font-size: 0.85rem; white-space: nowrap;
     }
-    .tip .muted { color: #c9d6da; }
+    .tip .muted { color: #b8c4d1; }
     .key { font-size: 0.9rem; margin-top: 8px; }
     .empty { padding: 40px 0; text-align: center; }
     details { margin-top: 12px; }

@@ -32,13 +32,13 @@ type SectionTab = 'storage' | 'peak' | 'grid';
 
       <div class="segmented" role="tablist" aria-label="Secțiune analiză">
         <button type="button" role="tab" [attr.aria-selected]="tab() === 'storage'" (click)="tab.set('storage')">
-          1. Potrivire storage per categorie
+          Stocare pe categorii
         </button>
         <button type="button" role="tab" [attr.aria-selected]="tab() === 'peak'" (click)="tab.set('peak')">
-          2. Zi normală vs. zi de vârf (10×)
+          Zi normală vs. zi de vârf
         </button>
         <button type="button" role="tab" [attr.aria-selected]="tab() === 'grid'" (click)="tab.set('grid')">
-          3. Analiza rețelei pe regiuni
+          Rețea pe regiuni
         </button>
       </div>
 
@@ -46,9 +46,9 @@ type SectionTab = 'storage' | 'peak' | 'grid';
 
       @if (stats.data(); as data) {
         @if (tab() === 'storage') {
-          <section class="card" aria-labelledby="storage-intro">
+          <section class="intro" aria-labelledby="storage-intro">
             <h2 id="storage-intro">De ce fiecare categorie are nevoie de un sistem de stocare diferit</h2>
-            <p class="muted">
+            <p>
               Măsurătorile de mai jos compară cele trei sisteme (PostgreSQL, FTP, S3) pe aceleași patru categorii de
               fișiere. Politica activă urmează recomandarea optimă și poate fi schimbată fără modificări de cod.
             </p>
@@ -57,9 +57,9 @@ type SectionTab = 'storage' | 'peak' | 'grid';
           @for (fit of data.storageFit; track fit.category) {
             <section class="card" [attr.aria-labelledby]="'cat-' + fit.category">
               <div class="page-head">
-                <div>
-                  <span class="eyebrow">{{ fit.typicalSize }} · {{ fit.businessGuarantee }}</span>
+                <div class="intro">
                   <h2 [id]="'cat-' + fit.category">{{ fit.category | label }}</h2>
+                  <p>{{ fit.typicalSize }}. {{ fit.businessGuarantee }}</p>
                 </div>
                 <span class="badge ACCEPTED">Recomandat: {{ fit.recommendedBackend | label }}</span>
               </div>
@@ -88,7 +88,7 @@ type SectionTab = 'storage' | 'peak' | 'grid';
                         <td data-label="Storage testat">
                           <strong>{{ c.backend | label }}</strong>
                           @if (c.backend === fit.recommendedBackend) {
-                            <span class="badge LOW" style="margin-left: 6px">Optim</span>
+                            <span class="badge LOW optimal">Optim</span>
                           }
                         </td>
                         <td data-label="p50 (ms)" class="data">{{ c.p50Ms | number: '1.0-1' }} ms</td>
@@ -110,21 +110,21 @@ type SectionTab = 'storage' | 'peak' | 'grid';
         @if (tab() === 'peak') {
           <div class="grid-3">
             <div class="card kpi">
-              <span class="eyebrow">Izolare între categorii la furtună (10×)</span>
+              <h3 class="kpi-label">Izolare între categorii la furtună (10×)</h3>
               <p class="kpi-value ok-text">100% SLA</p>
               <p class="muted">
                 Un vârf de 10× pe avarii (FTP) nu degradează citirile de contoare (PostgreSQL) sau racordările (S3).
               </p>
             </div>
             <div class="card kpi">
-              <span class="eyebrow">Procesare video > 1 GB în streaming</span>
+              <h3 class="kpi-label">Procesare video > 1 GB în streaming</h3>
               <p class="kpi-value data">≤ 32 MB RAM</p>
               <p class="muted">
                 Încărcarea în părți de 8–16 MB păstrează memoria constantă indiferent dacă fișierul are 50 MB sau 1,4 GB.
               </p>
             </div>
             <div class="card kpi">
-              <span class="eyebrow">Reziliență pe conexiuni degradate</span>
+              <h3 class="kpi-label">Reziliență pe conexiuni degradate</h3>
               <p class="kpi-value data">{{ totalResumed() | number }} părți reluate</p>
               <p class="muted">
                 Părțile eșuate pe rețea instabilă se reîncearcă automat cu backoff exponențial, fără pierdere sau dublare.
@@ -134,7 +134,7 @@ type SectionTab = 'storage' | 'peak' | 'grid';
 
           <section class="card" aria-labelledby="peak-table">
             <div class="page-head">
-              <h2 id="peak-table">Comparație directă: Zi normală vs. Zi de vârf (Furtună 10×)</h2>
+              <h2 id="peak-table">Zi normală față de zi de vârf (furtună, volum 10×)</h2>
               <span class="muted">Generat la {{ data.generatedAt | date: 'd MMM y, HH:mm' }}</span>
             </div>
 
@@ -210,9 +210,9 @@ type SectionTab = 'storage' | 'peak' | 'grid';
         }
 
         @if (tab() === 'grid') {
-          <section class="card" aria-labelledby="grid-intro">
+          <section class="intro" aria-labelledby="grid-intro">
             <h2 id="grid-intro">Ce spun datele colectate despre rețeaua electrică</h2>
-            <p class="muted">
+            <p>
               Corelarea citirilor de contoare inteligente cu înregistrările de avarie și inspecțiile video cu drona
               evidențiază zonele vulnerabile, abaterile de tensiune și prioritățile de mentenanță pe fiecare regiune.
             </p>
@@ -268,20 +268,22 @@ type SectionTab = 'storage' | 'peak' | 'grid';
   styles: `
     .segmented { justify-self: start; max-width: 100%; overflow-x: auto; }
     .grid-3 { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
-    .kpi { gap: 8px; }
-    .kpi-value { font: 600 1.9rem/1.1 var(--font-display); }
+    .kpi { gap: 6px; }
+    .kpi-label { font-size: 1rem; font-weight: 600; color: var(--ink-muted); }
+    .optimal { margin-left: 8px; }
+    .kpi-value { font: 600 1.9rem/1.1 var(--font-body); letter-spacing: -0.02em; }
     .ok-text { color: var(--ok); }
     .warn-text { color: var(--warn-ink); font-weight: 600; }
     .decision-box {
-      padding: 12px 14px; border-radius: var(--radius);
-      background: var(--primary-tint); border-left: 4px solid var(--primary);
+      padding: 14px 16px; border-radius: var(--radius);
+      background: var(--primary-tint); color: #183a73;
     }
-    .recommended-row { background: #f4fbfb; }
+    .recommended-row, .recommended-row:hover { background: var(--primary-tint); }
     .bars-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
-    .bar-card { border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; display: grid; gap: 10px; }
+    .bar-card { background: var(--surface); border-radius: var(--radius); padding: 16px; display: grid; gap: 10px; }
     .bar-pair { display: grid; gap: 6px; }
     .bar-row { display: grid; grid-template-columns: 95px 1fr 64px; gap: 8px; align-items: center; font-size: 0.9rem; }
-    .bar-track { height: 10px; background: var(--surface); border-radius: 999px; overflow: hidden; border: 1px solid var(--line); }
+    .bar-track { height: 10px; background: #dfe6ee; border-radius: 999px; overflow: hidden; }
     .bar-fill { height: 100%; border-radius: 999px; }
     .bar-fill.normal { background: var(--chart); }
     .bar-fill.peak { background: var(--hazard); }

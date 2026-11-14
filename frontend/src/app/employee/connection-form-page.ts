@@ -44,7 +44,7 @@ const emptyForm = (): ConnectionRequestForm => ({
           @if (!onBehalf) { <a class="button secondary" routerLink="/client">Înapoi la cererile mele</a> }
         </div>
       } @else {
-        <form ngNativeValidate (ngSubmit)="submit()" #f="ngForm" class="card">
+        <form ngNativeValidate (ngSubmit)="submit()" #f="ngForm" class="card steps">
           <fieldset [disabled]="sending()">
             <legend><h2>Solicitant</h2></legend>
             <div class="grid-2">
@@ -148,6 +148,20 @@ const emptyForm = (): ConnectionRequestForm => ({
         </form>
       }
     </div>
+  `,
+  // The form really is a sequence of four parts, so the parts are numbered.
+  styles: `
+    .steps { counter-reset: step; gap: 0; padding: 0; }
+    .steps fieldset { padding: 24px; border-bottom: 1px solid var(--line); }
+    .steps legend { float: left; width: 100%; display: flex; align-items: center; gap: 12px; margin-bottom: 16px; counter-increment: step; }
+    .steps legend::before {
+      content: counter(step); flex: none; width: 30px; height: 30px; border-radius: 50%;
+      display: grid; place-items: center; background: var(--primary-tint); color: var(--primary-dark); font-weight: 700;
+    }
+    .steps legend + * { clear: both; }
+    .steps > .notice { margin: 20px 24px 0; }
+    .steps > .row:last-child { border-top: 0; margin: 0; padding: 20px 24px; background: #f8fafc; border-radius: 0 0 var(--radius-lg) var(--radius-lg); }
+    @media (max-width: 720px) { .steps fieldset { padding: 18px; } .steps > .row:last-child { padding: 16px 18px; } }
   `,
 })
 export class ConnectionFormPage {

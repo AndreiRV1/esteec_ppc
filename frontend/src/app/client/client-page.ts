@@ -22,7 +22,7 @@ const MAX_HOURLY_DAYS = 14;
     <div class="page">
       @for (fault of faults.data() ?? []; track fault.id) {
         <div class="hazard" role="alert">
-          <span class="sign" aria-hidden="true">⚠</span>
+          <svg class="sign" viewBox="0 0 24 24" width="28" height="28" aria-hidden="true"><path d="M12 3 2 20.5h20z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M12 10v4.5M12 17.2v.3" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
           <div>
             <strong>Avarie în zona ta: {{ fault.locality ?? fault.county }}</strong>
             <p>
@@ -34,18 +34,18 @@ const MAX_HOURLY_DAYS = 14;
         </div>
       }
 
-      <div class="page-head">
+      <div class="intro">
         <h1>Consumul meu</h1>
         @if (me.data(); as user) {
-          <p class="muted">
-            Contor <span class="data">{{ user.meterId ?? '—' }}</span>
-            @if (user.locality) { · {{ user.locality }}, {{ user.county }} }
+          <p>
+            @if (user.locality) { {{ user.locality }}, {{ user.county }}. }
+            Contorul <span class="data">{{ user.meterId ?? 'nealocat' }}</span>
           </p>
         }
       </div>
 
       <section class="card" aria-labelledby="luna">
-        <h2 id="luna" class="eyebrow">Luna aceasta, până acum</h2>
+        <h2 id="luna">Luna aceasta, până acum</h2>
         <fg-status [of]="summary" />
         @if (summary.data(); as s) {
           <div class="reading">
@@ -56,11 +56,16 @@ const MAX_HOURLY_DAYS = 14;
               <span class="unit" aria-hidden="true">kWh</span>
             </p>
             <div class="compare">
-              <p><span class="eyebrow">Luna trecută</span><br /><span class="data big">{{ s.previousMonthKwh | number: '1.1-1' }} kWh</span></p>
               @if (s.previousMonthKwh > 0) {
-                <p class="muted">
-                  Ai consumat până acum {{ s.monthToDateKwh / s.previousMonthKwh | percent: '1.0-0' }} din totalul lunii trecute.
+                <p class="share">
+                  <strong>{{ s.monthToDateKwh / s.previousMonthKwh | percent: '1.0-0' }}</strong>
+                  din consumul lunii trecute ({{ s.previousMonthKwh | number: '1.1-1' }} kWh)
                 </p>
+                <div class="meter" aria-hidden="true">
+                  <span [style.width.%]="(s.monthToDateKwh / s.previousMonthKwh) * 100 > 100 ? 100 : (s.monthToDateKwh / s.previousMonthKwh) * 100"></span>
+                </div>
+              } @else {
+                <p><span class="eyebrow">Luna trecută</span><br /><span class="data big">{{ s.previousMonthKwh | number: '1.1-1' }} kWh</span></p>
               }
               @if (s.lastReadingAt) {
                 <p class="muted">Ultima citire: {{ s.lastReadingAt | date: 'd MMM, HH:mm' }}</p>
@@ -71,19 +76,28 @@ const MAX_HOURLY_DAYS = 14;
       </section>
 
       <section class="card" aria-labelledby="consum">
-        <div class="page-head">
+        <div class="section-head">
           <h2 id="consum">Consum</h2>
           @if (total() !== null) {
             <p class="muted">Total în interval: <span class="data">{{ total() | number: '1.0-1' }} kWh</span></p>
           }
         </div>
-        <div class="row">
+        <div class="controls">
           <div class="segmented" role="group" aria-label="Afișare pe">
             <button type="button" [attr.aria-pressed]="bucket() === 'HOUR'" (click)="setBucket('HOUR')">Pe ore</button>
             <button type="button" [attr.aria-pressed]="bucket() === 'DAY'" (click)="setBucket('DAY')">Pe zile</button>
           </div>
-          <label>De la <input type="date" [ngModel]="from()" (ngModelChange)="from.set($event)" [max]="to()" /></label>
-          <label>Până la <input type="date" [ngModel]="to()" (ngModelChange)="to.set($event)" [min]="from()" [max]="today" /></label>
+          <div class="presets" role="group" aria-label="Interval">
+            @for (days of presets(); track days) {
+              <button type="button" class="chip" [attr.aria-pressed]="isPreset(days)" (click)="setRange(days)">
+                {{ days === 1 ? 'Azi' : 'Ultimele ' + days + ' zile' }}
+              </button>
+            }
+          </div>
+          <div class="dates">
+            <label>De la <input type="date" [ngModel]="from()" (ngModelChange)="from.set($event)" [max]="to()" /></label>
+            <label>Până la <input type="date" [ngModel]="to()" (ngModelChange)="to.set($event)" [min]="from()" [max]="today" /></label>
+          </div>
         </div>
         @if (rangeError(); as message) {
           <p class="notice error" role="alert">{{ message }}</p>
@@ -96,34 +110,31 @@ const MAX_HOURLY_DAYS = 14;
       </section>
 
       <section aria-labelledby="cereri" class="requests">
-        <div class="page-head">
+        <div class="section-head">
           <h2 id="cereri">Cererile mele de racordare</h2>
-          <a class="button secondary" routerLink="/connection-requests/new">Depune o cerere</a>
+          <a class="button" routerLink="/connection-requests/new">Depune o cerere</a>
         </div>
         <fg-status [of]="requests" />
         @if (requests.data(); as list) {
           @if (list.length === 0) {
-            <p class="notice">Nu ai depus nicio cerere de racordare.</p>
-          } @else {
-            <div class="table-wrap">
-              <table class="stack">
-                <thead><tr><th>Depusă</th><th>Tip</th><th>Loc de consum</th><th>Putere</th><th>Stare</th></tr></thead>
-                <tbody>
-                  @for (request of list; track request.clientId) {
-                    <tr>
-                      <td data-label="Depusă">{{ request.createdAt | date: 'd MMM y' }}</td>
-                      <td data-label="Tip">{{ request.requestType | label }}</td>
-                      <td data-label="Loc de consum">{{ request.locality }}, {{ request.county }}</td>
-                      <td data-label="Putere" class="data">{{ request.requestedPowerKw | number }} kW</td>
-                      <td data-label="Stare">
-                        <span class="badge {{ request.status }}">{{ request.status | label }}</span>
-                        @if (request.statusReason) { <div class="muted reason">{{ request.statusReason }}</div> }
-                      </td>
-                    </tr>
-                  }
-                </tbody>
-              </table>
+            <div class="empty-requests">
+              <p>Nu ai depus nicio cerere de racordare. Dacă ai nevoie de un loc de consum nou sau de mai multă putere, poți depune cererea online.</p>
             </div>
+          } @else {
+            <ul class="request-list">
+              @for (request of list; track request.clientId) {
+                <li>
+                  <div class="what">
+                    <strong>{{ request.requestType | label }}, {{ request.locality }}</strong>
+                    <span class="muted">
+                      {{ request.requestedPowerKw | number }} kW în {{ request.county }}, depusă pe {{ request.createdAt | date: 'd MMMM y' }}
+                    </span>
+                    @if (request.statusReason) { <p class="reason">{{ request.statusReason }}</p> }
+                  </div>
+                  <span class="badge {{ request.status }}">{{ request.status | label }}</span>
+                </li>
+              }
+            </ul>
           }
         }
       </section>
@@ -132,18 +143,36 @@ const MAX_HOURLY_DAYS = 14;
   styles: `
     .hazard {
       display: flex; gap: 14px; align-items: flex-start; padding: 14px 16px; border-radius: var(--radius);
-      background: var(--hazard); color: #1a1400; border: 2px solid var(--ink);
+      background: var(--warn-tint); color: #4d3400; border: 1px solid #ecc96a; border-radius: var(--radius-lg);
     }
-    .sign { font-size: 1.8rem; line-height: 1; }
+    .sign { flex: none; color: #9a6a00; }
     .reading { display: flex; flex-wrap: wrap; gap: 20px 40px; align-items: center; }
     .register { display: flex; align-items: center; gap: 3px; font: 500 clamp(1.7rem, 7vw, 2.6rem)/1 var(--font-data); }
-    .register span { background: var(--ink); color: #fff; padding: 8px 6px; border-radius: 3px; min-width: 1.15ch; text-align: center; }
+    .register span { background: var(--ink); color: #fff; padding: 10px 7px; border-radius: 6px; min-width: 1.15ch; text-align: center; }
     .register .decimal { background: var(--critical); margin-left: 3px; }
-    .register .unit { background: none; color: var(--ink-muted); font: 600 1.1rem var(--font-display); letter-spacing: 0.08em; padding-left: 8px; }
-    .compare { display: grid; gap: 4px; }
+    .register .unit { background: none; color: var(--ink-muted); font: 600 1.1rem var(--font-body); padding-left: 10px; }
+    .compare { display: grid; gap: 8px; flex: 1 1 260px; max-width: 420px; }
+    .share strong { font-size: 1.5rem; font-variant-numeric: tabular-nums; margin-right: 4px; }
+    .meter { height: 10px; border-radius: 999px; background: #e2e8ef; overflow: hidden; }
+    .meter span { display: block; height: 100%; border-radius: inherit; background: var(--chart); }
+    .section-head { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; justify-content: space-between; }
     .big { font-size: 1.25rem; }
-    .requests { display: grid; gap: 12px; }
-    .reason { font-size: 0.9rem; }
+    .requests { display: grid; gap: 14px; }
+    .controls { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: end; }
+    .presets { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chip { min-height: 36px; padding: 0 14px; border-radius: 999px; background: var(--card); color: var(--ink); border: 1px solid var(--line-strong); box-shadow: none; font-weight: 500; font-size: 0.92rem; }
+    .chip:hover { background: var(--surface); color: var(--ink); border-color: var(--ink-muted); }
+    .chip[aria-pressed='true'] { background: var(--ink); color: #fff; border-color: var(--ink); }
+    .dates { display: flex; gap: 10px; margin-left: auto; }
+    .dates label { font-size: 0.88rem; color: var(--ink-muted); }
+    .dates input { min-height: 38px; }
+    @media (max-width: 720px) { .dates { margin-left: 0; width: 100%; } .dates label { flex: 1; } }
+    .request-list { list-style: none; margin: 0; padding: 0; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-lg); box-shadow: var(--shadow); }
+    .request-list li { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: start; justify-content: space-between; padding: 16px 20px; }
+    .request-list li + li { border-top: 1px solid var(--line); }
+    .what { display: grid; gap: 2px; min-width: 0; }
+    .reason { margin-top: 6px; font-size: 0.92rem; color: var(--ink-muted); padding: 8px 12px; background: var(--surface); border-radius: var(--radius); }
+    .empty-requests { padding: 24px; border: 1.5px dashed var(--line-strong); border-radius: var(--radius-lg); color: var(--ink-muted); max-width: 70ch; }
   `,
 })
 export class ClientPage {
@@ -192,6 +221,18 @@ export class ClientPage {
       if (this.rangeError() || !fromIso || !toIso) return;
       untracked(() => void this.consumption.run(() => this.api.consumption(fromIso, toIso, bucket)));
     });
+  }
+
+  /** Quick ranges that stay within what each view can show. */
+  protected readonly presets = computed(() => (this.bucket() === 'HOUR' ? [1, 3, 7] : [7, 30, 90]));
+
+  protected isPreset(days: number): boolean {
+    return this.to() === this.today && this.from() === toDateInput(new Date(Date.now() - (days - 1) * DAY_MS));
+  }
+
+  protected setRange(days: number): void {
+    this.from.set(toDateInput(new Date(Date.now() - (days - 1) * DAY_MS)));
+    this.to.set(this.today);
   }
 
   protected setBucket(bucket: Bucket): void {
