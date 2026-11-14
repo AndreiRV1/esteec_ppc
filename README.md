@@ -5,7 +5,8 @@ readings, substation fault records, customer connection documents and drone
 inspection videos. Requirements: [`FileGrid PPC.pdf`](FileGrid%20PPC.pdf).
 
 This repository currently contains the **storage layer**: PostgreSQL, MinIO (S3)
-and vsftpd (FTP), each in its own container, plus the database schema.
+and vsftpd (FTP), each in its own container, plus the database schema, and the
+**smart-meter simulator** ([`simulator/`](simulator/README.md)).
 
 ## Quick start
 
@@ -34,6 +35,10 @@ make dev     # same stack, with ports bound to 127.0.0.1 only
 | MinIO console | `http://localhost:9001` | `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` |
 | FTP (passive) | `ftp://localhost:2121`, data ports 21100-21119 | `FTP_USER` / `FTP_PASSWORD` |
 
+Meter simulator: `make seed` registers the simulated meters in the database,
+`make sim` starts sending readings to FileGrid on `localhost:8080`. See
+[`simulator/README.md`](simulator/README.md) for rate, anomalies and runtime control.
+
 Other targets: `make ps`, `make logs`, `make psql`, `make migrate`, `make down`,
 `make clean` (**deletes all data volumes**).
 
@@ -48,6 +53,8 @@ infra/postgres/initdb/    first-boot role and schema setup
 infra/minio/              bucket bootstrap script + app IAM policy
 infra/vsftpd/             FTP server image (Alpine + vsftpd)
 docs/                     design notes (connection documents research)
+simulator/                smart-meter simulator (Spring Boot)
+db/seed/                  generated meter registry (`make seed`, git-ignored)
 ```
 
 ## Storage decisions

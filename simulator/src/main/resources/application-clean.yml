@@ -1,0 +1,18 @@
+# No anomalies: every message is valid and sent exactly once.
+simulator:
+  anomalies:
+    rates:
+      duplicate: 0
+      race-duplicate: 0
+      resent-intervals: 0
+      late: 0
+      future-timestamp: 0
+      misaligned-timestamp: 0
+      gap: 0
+      sequence-reset: 0
+      malformed: 0
+      invalid-value: 0
+      unknown-meter: 0
+      wrong-region: 0
+      voltage-out-of-range: 0
+      consumption-spike: 0

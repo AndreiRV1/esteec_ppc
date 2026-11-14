@@ -8,3 +8,8 @@
 .idea/
 .vscode/
 *.iml
+
+# Build output and generated data
+simulator/target/
+db/seed/
+*.jsonl
