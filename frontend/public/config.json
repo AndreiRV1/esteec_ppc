@@ -1,0 +1,6 @@
+{
+  "keycloakUrl": "http://localhost:8180",
+  "realm": "filegrid",
+  "clientId": "filegrid-web",
+  "grafanaUrl": "/grafana"
+}
