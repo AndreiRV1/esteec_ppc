@@ -1,0 +1,13 @@
+# Storage endpoints and secrets are injected by TestStorages (@DynamicPropertySource).
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # Tests use mocked JWTs; the decoder is never called.
+          issuer-uri: http://issuer.invalid/realms/filegrid
+          jwk-set-uri: http://issuer.invalid/realms/filegrid/protocol/openid-connect/certs
+
+management:
+  server:
+    port: 0

@@ -9,6 +9,8 @@
 .vscode/
 *.iml
 
+# Build output
+backend/target/
 # Build output and generated data
 simulator/target/
 db/seed/

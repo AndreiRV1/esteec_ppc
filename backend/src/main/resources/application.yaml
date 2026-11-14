@@ -1,0 +1,97 @@
+# All secrets come from the environment (see ../.env.example). Defaults below
+# target `make dev` (storages on 127.0.0.1); compose overrides hosts for the container.
+spring:
+  application:
+    name: filegrid
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    url: jdbc:postgresql://${FILEGRID_DB_HOST:localhost}:${FILEGRID_DB_PORT:5432}/${POSTGRES_DB:filegrid}
+    username: filegrid_app
+    password: ${FILEGRID_DB_APP_PASSWORD}
+    hikari:
+      maximum-pool-size: 20
+      connection-timeout: 5000
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 32MB
+      # Parts above this are spooled to disk, not held in memory.
+      file-size-threshold: 256KB
+  mvc:
+    problemdetails:
+      enabled: true
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # Tokens carry the public issuer; keys are fetched over the internal network.
+          issuer-uri: ${FILEGRID_OIDC_ISSUER:http://localhost:8180/realms/filegrid}
+          jwk-set-uri: ${FILEGRID_OIDC_JWKS_URI:http://localhost:8180/realms/filegrid/protocol/openid-connect/certs}
+          audiences: filegrid-api
+
+server:
+  shutdown: graceful
+  # Behind a TLS-terminating proxy in production.
+  forward-headers-strategy: framework
+
+management:
+  server:
+    # Separate port, never published outside the backend network.
+    port: ${FILEGRID_MANAGEMENT_PORT:8081}
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+  tracing:
+    sampling:
+      probability: 1.0
+  opentelemetry:
+    tracing:
+      export:
+        # Turned on once the observability stack (collector/Tempo) is added.
+        enabled: ${FILEGRID_TRACE_EXPORT:false}
+  otlp:
+    metrics:
+      export:
+        enabled: false
+
+springdoc:
+  # Set FILEGRID_API_DOCS_ENABLED=false in production.
+  api-docs:
+    enabled: ${FILEGRID_API_DOCS_ENABLED:true}
+  swagger-ui:
+    enabled: ${FILEGRID_API_DOCS_ENABLED:true}
+    path: /swagger-ui.html
+
+filegrid:
+  identity-pepper: ${FILEGRID_IDENTITY_PEPPER}
+  crypto:
+    active-key-id: ${FILEGRID_MASTER_KEY_ID:kek-v1}
+    master-keys:
+      kek-v1: ${FILEGRID_MASTER_KEY_V1}
+  storage:
+    temp-dir: ${FILEGRID_TEMP_DIR:${java.io.tmpdir}/filegrid}
+    s3:
+      endpoint: ${FILEGRID_S3_ENDPOINT:http://localhost:9000}
+      region: us-east-1
+      access-key: ${FILEGRID_S3_ACCESS_KEY}
+      secret-key: ${FILEGRID_S3_SECRET_KEY}
+      connect-timeout: 3s
+      socket-timeout: 30s
+    ftp:
+      host: ${FILEGRID_FTP_HOST:localhost}
+      port: ${FILEGRID_FTP_PORT:2121}
+      username: ${FTP_USER}
+      password: ${FTP_PASSWORD}
+      connect-timeout: 3s
+      data-timeout: 30s

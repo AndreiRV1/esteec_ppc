@@ -1,0 +1,134 @@
+{
+  "realm": "filegrid",
+  "displayName": "FileGrid PPC",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": true,
+  "registrationEmailAsUsername": true,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": false,
+  "verifyEmail": false,
+  "rememberMe": false,
+  "bruteForceProtected": true,
+  "failureFactor": 5,
+  "waitIncrementSeconds": 60,
+  "maxFailureWaitSeconds": 900,
+  "passwordPolicy": "length(12) and notUsername and notEmail",
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "roles": {
+    "realm": [
+      {
+        "name": "client",
+        "description": "Applicant: submits and follows own connection requests (racordare)"
+      },
+      {
+        "name": "admin",
+        "description": "Reviews connection requests and reads their documents"
+      },
+      {
+        "name": "default-roles-filegrid",
+        "description": "Granted to every self-registered user",
+        "composite": true,
+        "composites": {
+          "realm": ["client"]
+        }
+      }
+    ]
+  },
+  "defaultRole": {
+    "name": "default-roles-filegrid"
+  },
+  "clients": [
+    {
+      "clientId": "filegrid-web",
+      "name": "FileGrid web app",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["http://localhost:4200/*"],
+      "webOrigins": ["http://localhost:4200"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:4200/*"
+      },
+      "protocolMappers": [
+        {
+          "name": "filegrid-api-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "filegrid-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "filegrid-cli",
+      "name": "Scripts and API testing (password grant; disable in production)",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "protocolMappers": [
+        {
+          "name": "filegrid-api-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "filegrid-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "admin@filegrid.local",
+      "email": "admin@filegrid.local",
+      "emailVerified": true,
+      "firstName": "FileGrid",
+      "lastName": "Admin",
+      "enabled": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${FILEGRID_ADMIN_PASSWORD}",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["admin"]
+    },
+    {
+      "username": "client.demo@filegrid.local",
+      "email": "client.demo@filegrid.local",
+      "emailVerified": true,
+      "firstName": "Client",
+      "lastName": "Demo",
+      "enabled": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${FILEGRID_DEMO_CLIENT_PASSWORD}",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["default-roles-filegrid"]
+    }
+  ]
+}

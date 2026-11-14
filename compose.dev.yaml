@@ -2,8 +2,13 @@
 # running on the host (IDE, `./mvnw spring-boot:run`) can reach them.
 # Never use this file on a shared or public machine.
 #
-#   docker compose -f compose.yaml -f compose.dev.yaml up -d   (or: make dev)
+#   make dev   (starts everything except the backend container)
 services:
+  backend:
+    # In this mode the backend runs on the host: FTP passive replies point at
+    # 127.0.0.1, which a containerised backend could not reach.
+    profiles: ["backend-in-docker"]
+
   postgres:
     ports:
       - "127.0.0.1:${POSTGRES_HOST_PORT:-5432}:5432"
