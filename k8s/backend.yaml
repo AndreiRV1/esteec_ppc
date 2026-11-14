@@ -27,6 +27,7 @@ data:
   FILEGRID_OIDC_JWKS_URI: "http://keycloak:8080/auth/realms/filegrid/protocol/openid-connect/certs"
   FILEGRID_KEYCLOAK_URL: "http://keycloak:8080/auth"
   FILEGRID_ALERTMANAGER_URL: "http://alertmanager:9093"
+  FILEGRID_PROMETHEUS_URL: "http://prometheus:9090"
   LOGGING_STRUCTURED_FORMAT_CONSOLE: "ecs"
   FILEGRID_TRACE_EXPORT: "true"
   FILEGRID_OTLP_TRACES_ENDPOINT: "http://tempo:4318/v1/traces"

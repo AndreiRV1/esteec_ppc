@@ -180,6 +180,7 @@ services:
       # Creates applicant logins on registration (service account, manage-users only).
       FILEGRID_KEYCLOAK_URL: http://keycloak:8080/auth
       FILEGRID_ALERTMANAGER_URL: http://alertmanager:9093
+      FILEGRID_PROMETHEUS_URL: http://prometheus:9090
       FILEGRID_KEYCLOAK_BACKEND_SECRET: ${FILEGRID_KEYCLOAK_BACKEND_SECRET:?missing - run `make env`}
       FILEGRID_MASTER_KEY_V1: ${FILEGRID_MASTER_KEY_V1:?missing - run `make env`}
       FILEGRID_IDENTITY_PEPPER: ${FILEGRID_IDENTITY_PEPPER:?missing - run `make env`}

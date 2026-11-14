@@ -25,7 +25,7 @@ export SIMULATOR_METERS_COUNT ?= 2000
 SIMULATOR ?= 1
 
 .DEFAULT_GOAL := help
-.PHONY: help env up dev down ps logs psql migrate test demo demo-setup clean \
+.PHONY: help env up dev down ps logs psql migrate test demo demo-setup clean seed-if-empty \
 	gen-data gen-storm gen-large-video seed-data verify-data data-status sim-build seed seed-clients sim
 
 help: ## Show this help
@@ -48,12 +48,13 @@ up: env ## Start everything behind the TLS proxy on https://localhost:8443 (noth
 	$(COMPOSE) $(PROFILES) up -d --build --no-deps --wait $(PLATFORM) $(FRONTEND)
 	FILEGRID_ENV_FILE=$(ENV_FILE) ./scripts/keycloak-sync.sh
 	$(COMPOSE) up -d --build --no-deps --wait backend
+	@$(MAKE) -s seed-if-empty
 	$(if $(filter 1,$(SIMULATOR)),$(COMPOSE) --profile simulator up -d --build --no-deps simulator)
 	@url=$(PUBLIC_URL); echo "FileGrid is up (local CA certificate: accept it once in the browser):"; \
 	echo "  App      $$url/"; echo "  API docs $$url/swagger-ui.html"; \
 	echo "  Login    $$url/auth/realms/filegrid/account/"; \
 	echo "  Grafana  $$url/grafana/   (admin@filegrid.local)"; echo "  Alerts   $$url/mailpit/"; \
-	echo "First run: \`make seed seed-clients\` loads the meters the simulator reports for, and client logins."
+	echo "Demo data and logins: \`make demo-setup\` (walkthrough in docs/demo.md)."
 
 dev: env ## Start everything except the backend, with storages on 127.0.0.1 (run the backend from your IDE)
 	$(call start,$(DEV))
@@ -115,6 +116,11 @@ seed: $(ENV_FILE) sim-build ## Generate db/seed/meters.sql from the simulator fl
 	  --spring.profiles.active=seed --simulator.seed-file=/out/meters.sql $(SIM_ARGS)
 	$(COMPOSE) exec -T postgres sh -c 'PGPASSWORD="$$FILEGRID_DB_MIGRATOR_PASSWORD" psql -q -v ON_ERROR_STOP=1 -h 127.0.0.1 -U filegrid_migrator -d "$$POSTGRES_DB"' < db/seed/meters.sql
 	@echo "Meters loaded into filegrid.meter."
+
+# Loads the simulator's meter fleet on a fresh database, so `make up` alone gives live readings.
+seed-if-empty: $(ENV_FILE)
+	@n=$$($(COMPOSE) exec -T postgres sh -c 'psql -tA -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -c "SELECT count(*) FROM filegrid.meter"' 2>/dev/null); \
+	if [ "$${n:-0}" = "0" ]; then echo "Fresh database: loading the meter fleet"; $(MAKE) -s seed >/dev/null; fi
 
 seed-clients: $(ENV_FILE) ## Create demo customer logins for seeded meters (CLIENTS=n per region; writes db/seed/clients.csv)
 	FILEGRID_ENV_FILE=$(ENV_FILE) ./scripts/seed-clients.py $(CLIENTS)

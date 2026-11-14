@@ -1,5 +1,5 @@
 import { DecimalPipe } from '@angular/common';
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { ApiService, Loader } from '../core/api';
 import { LabelPipe } from '../core/format';
 import { CategoryStorageFit, DayCategoryMetrics, RegionalGridInsight, SystemStatistics } from '../core/models';
@@ -31,7 +31,7 @@ type SectionTab = 'storage' | 'peak' | 'grid';
           Stocare pe categorii
         </button>
         <button type="button" role="tab" [attr.aria-selected]="tab() === 'peak'" (click)="tab.set('peak')">
-          Zi normală vs. zi de vârf
+          Normal vs. vârf
         </button>
         <button type="button" role="tab" [attr.aria-selected]="tab() === 'grid'" (click)="tab.set('grid')">
           Rețea pe regiuni
@@ -87,7 +87,7 @@ type SectionTab = 'storage' | 'peak' | 'grid';
         @if (tab() === 'peak') {
           <section class="card" aria-labelledby="peak-table">
             <div class="page-head">
-              <h2 id="peak-table">Zi normală vs. zi de vârf</h2>
+              <h2 id="peak-table">{{ hourly() ? 'Oră obișnuită vs. oră de vârf' : 'Zi normală vs. zi de vârf' }}</h2>
             </div>
 
             <div class="bars-grid">
@@ -116,8 +116,9 @@ type SectionTab = 'storage' | 'peak' | 'grid';
                     </div>
                   </div>
                   <p class="muted small-note">
+                    {{ period(item.normalStart, item) }} → {{ period(item.peakStart, item) }}<br />
                     Volum: <span class="data">{{ item.normalFilesPerDay | number }}</span> →
-                    <span class="data">{{ item.peakFilesPerDay | number }}</span> fișiere/zi
+                    <span class="data">{{ item.peakFilesPerDay | number }}</span> {{ item.bucket === 'HOUR' ? 'fișiere/oră' : 'fișiere/zi' }}
                     ({{ item.normalVolumeMb | number: '1.0-0' }} MB → {{ item.peakVolumeMb | number: '1.0-0' }} MB)
                   </p>
                 </div>
@@ -236,6 +237,17 @@ export class StatisticsPage {
 
   protected reload(): void {
     void this.stats.run(() => this.api.statistics());
+  }
+
+  protected readonly hourly = computed(() => this.stats.data()?.normalVsPeak.some((r) => r.bucket === 'HOUR') ?? false);
+
+  /** When a compared period started, in local time. */
+  protected period(start: string | null | undefined, row: DayCategoryMetrics): string {
+    if (!start) return '—';
+    const d = new Date(start);
+    return row.bucket === 'HOUR'
+      ? d.toLocaleString('ro-RO', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+      : d.toLocaleDateString('ro-RO', { day: 'numeric', month: 'short' });
   }
 
   /** A measured value with its unit, or a dash when the backend has not measured it yet. */

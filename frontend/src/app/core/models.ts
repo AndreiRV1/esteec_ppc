@@ -321,6 +321,10 @@ export interface CategoryStorageFit {
 
 export interface DayCategoryMetrics {
   category: AllDataCategory;
+  /** DAY once there are 3+ days of traffic, HOUR before that. */
+  bucket?: 'DAY' | 'HOUR';
+  normalStart?: string | null;
+  peakStart?: string | null;
   normalFilesPerDay: number;
   peakFilesPerDay: number;
   normalVolumeMb: number;
