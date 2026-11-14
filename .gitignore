@@ -14,6 +14,7 @@ __pycache__/
 *.py[cod]
 .venv/
 backend/fault_videos/data/
+backend/fault_videos/data-*/
 # Build output
 backend/target/
 # Build output and generated data

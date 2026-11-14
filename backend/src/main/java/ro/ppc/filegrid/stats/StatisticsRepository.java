@@ -21,7 +21,9 @@ public class StatisticsRepository {
         this.jdbc = jdbc;
     }
 
-    public record DayRow(String category, long files, double megabytes, double errorRatePercent) {
+    /** One period (day or hour) with traffic: files, MB stored, % failed. */
+    public record DayRow(String category, java.time.Instant start, long files, double megabytes,
+                         double errorRatePercent) {
     }
 
     public record RegionInsight(Region region, long activeMeters, long readings24h, long anomalies24h,
@@ -43,10 +45,24 @@ public class StatisticsRepository {
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
-    /** Per category and local day with traffic: files, MB stored, % failed. Meter readings count raw messages. */
-    public Map<String, List<DayRow>> dailyVolumes(int days) {
+    /** Local days with any traffic in the last 30 days (decides whether days or hours are compared). */
+    public int activeDays() {
         return jdbc.sql("""
-                        SELECT category, count(*) AS files,
+                        SELECT count(DISTINCT date_trunc('day', t, :zone)) FROM (
+                            SELECT created_at AS t FROM stored_file WHERE created_at >= now() - interval '30 days'
+                            UNION ALL
+                            SELECT received_at FROM meter_reading_raw WHERE received_at >= now() - interval '30 days') x
+                        """)
+                .param("zone", ZONE).query(Integer.class).single();
+    }
+
+    /**
+     * Per category and period with traffic ({@code unit} = day or hour, local time) over the last
+     * {@code window}: files, MB stored, % failed. Meter readings count raw messages.
+     */
+    public Map<String, List<DayRow>> volumes(String unit, java.time.Duration window) {
+        return jdbc.sql("""
+                        SELECT category, date_trunc(:unit, created_at, :zone) AS start, count(*) AS files,
                                coalesce(sum(size_bytes) FILTER (WHERE ok), 0) / 1e6 AS mb,
                                100.0 * count(*) FILTER (WHERE NOT ok) / count(*) AS error_rate
                         FROM (SELECT category, created_at, size_bytes, status = 'STORED' AS ok
@@ -54,13 +70,15 @@ public class StatisticsRepository {
                               UNION ALL
                               SELECT 'METER_READING', received_at, size_bytes, processing_status <> 'REJECTED'
                               FROM meter_reading_raw) t
-                        WHERE created_at >= now() - make_interval(days => :days)
-                        GROUP BY category, date_trunc('day', created_at, :zone)
+                        WHERE created_at >= now() - make_interval(secs => :seconds)
+                        GROUP BY category, 2
                         """)
-                .param("days", days)
+                .param("unit", unit)
                 .param("zone", ZONE)
-                .query((rs, n) -> new DayRow(rs.getString("category"), rs.getLong("files"), rs.getDouble("mb"),
-                        rs.getDouble("error_rate")))
+                .param("seconds", window.toSeconds())
+                .query((rs, n) -> new DayRow(rs.getString("category"),
+                        ro.ppc.filegrid.storage.StoredFileRepository.instant(rs, "start"), rs.getLong("files"),
+                        rs.getDouble("mb"), rs.getDouble("error_rate")))
                 .list().stream().collect(Collectors.groupingBy(DayRow::category));
     }
 

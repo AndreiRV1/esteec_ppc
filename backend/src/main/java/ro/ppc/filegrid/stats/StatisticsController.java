@@ -43,7 +43,12 @@ public class StatisticsController {
                              Backend recommendedBackend, String whyRecommended, List<Candidate> candidates) {
     }
 
-    public record DayMetrics(Category category, long normalFilesPerDay, long peakFilesPerDay, double normalVolumeMb,
+    /**
+     * A typical period against the busiest one. {@code bucket} is DAY once there are 3+ days of traffic,
+     * HOUR before that (a fresh demo stack has only today). Counts are per period.
+     */
+    public record DayMetrics(Category category, String bucket, Instant normalStart, Instant peakStart,
+                             long normalFilesPerDay, long peakFilesPerDay, double normalVolumeMb,
                              double peakVolumeMb, Double normalP95Ms, Double peakP95Ms, double normalErrorRatePercent,
                              double peakErrorRatePercent, Long resumedOrRetried, boolean slaMet) {
     }
@@ -70,12 +75,18 @@ public class StatisticsController {
                     "Încărcare reluabilă pe conexiuni instabile, fără să încarce memoria serverului.", Backend.S3,
                     "Multipart upload: fiecare parte se scrie direct în S3, iar reluarea pornește de la ultima parte.")));
 
+    private static final String BUCKETS = "filegrid_storage_operation_seconds_bucket";
+    private static final String COUNT = "filegrid_storage_operation_seconds_count";
+    private static final String SUM = "filegrid_storage_operation_seconds_sum";
+
     private final MeterRegistry meters;
     private final StatisticsRepository repository;
+    private final PrometheusQueries prometheus;
 
-    public StatisticsController(MeterRegistry meters, StatisticsRepository repository) {
+    public StatisticsController(MeterRegistry meters, StatisticsRepository repository, PrometheusQueries prometheus) {
         this.meters = meters;
         this.repository = repository;
+        this.prometheus = prometheus;
     }
 
     @Operation(summary = "Storage fit per category, normal vs peak day, grid insights per region")
@@ -86,22 +97,30 @@ public class StatisticsController {
         for (Category category : Category.values()) {
             Text text = TEXT.get(category);
             List<Candidate> candidates = new ArrayList<>();
+            Map<Backend, Candidate> measured = prometheus.available()
+                    ? fromPrometheus(category, bytes) : Map.of();
             for (Backend backend : Backend.values()) {
-                Collection<Timer> timers = meters.find("filegrid.storage.operation")
-                        .tag("category", category.name()).tag("backend", backend.name()).timers();
-                Candidate c = candidate(backend, timers, bytes.get(category + "/" + backend));
+                Candidate c = measured.get(backend);
+                if (c == null && !prometheus.available()) {
+                    Collection<Timer> timers = meters.find("filegrid.storage.operation")
+                            .tag("category", category.name()).tag("backend", backend.name()).timers();
+                    c = candidate(backend, timers, bytes.get(category + "/" + backend));
+                }
                 if (c != null || backend == text.recommended()) {
                     candidates.add(c != null ? c : new Candidate(backend, null, null, null, null, null, null, 0,
-                            "Nemăsurat încă: nicio operație de la pornirea serverului."));
+                            "Nemăsurat încă: nicio operație în ultimele 24 de ore."));
                 }
             }
             fit.add(new StorageFit(category, text.size(), text.guarantee(), text.recommended(), text.why(), candidates));
         }
         Long duplicates = counter("filegrid.meter.raw", "status", "duplicate");
         List<DayMetrics> days = new ArrayList<>();
-        Map<String, List<DayRow>> byCategory = repository.dailyVolumes(30);
+        boolean byDay = repository.activeDays() >= 3;
+        String unit = byDay ? "day" : "hour";
+        Map<String, List<DayRow>> byCategory = repository.volumes(unit,
+                byDay ? java.time.Duration.ofDays(30) : java.time.Duration.ofHours(48));
         for (Category category : Category.values()) {
-            days.add(day(category, byCategory.getOrDefault(category.name(), List.of()),
+            days.add(day(category, byDay, byCategory.getOrDefault(category.name(), List.of()),
                     category == Category.METER_READING ? duplicates : null));
         }
         return new Statistics(Instant.now(), fit, days, repository.regionalInsights(Region.values()));
@@ -151,12 +170,71 @@ public class StatisticsController {
         return lower; // above the largest bucket
     }
 
-    /** Normal = median day by count, peak = busiest day, over the days that had any traffic. */
-    private static DayMetrics day(Category category, List<DayRow> rows, Long retried) {
-        if (rows.isEmpty()) return new DayMetrics(category, 0, 0, 0, 0, null, null, 0, 0, retried, true);
+    /** Normal = median period by count, peak = busiest one, over the periods that had any traffic. */
+    private DayMetrics day(Category category, boolean byDay, List<DayRow> rows, Long retried) {
+        String bucket = byDay ? "DAY" : "HOUR";
+        if (rows.isEmpty()) {
+            return new DayMetrics(category, bucket, null, null, 0, 0, 0, 0, null, null, 0, 0, retried, true);
+        }
         List<DayRow> sorted = rows.stream().sorted((a, b) -> Long.compare(a.files(), b.files())).toList();
         DayRow normal = sorted.get(sorted.size() / 2), peak = sorted.getLast();
-        return new DayMetrics(category, normal.files(), peak.files(), normal.megabytes(), peak.megabytes(), null, null,
-                normal.errorRatePercent(), peak.errorRatePercent(), retried, peak.errorRatePercent() < 1.0);
+        return new DayMetrics(category, bucket, normal.start(), peak.start(), normal.files(), peak.files(),
+                normal.megabytes(), peak.megabytes(), p95In(category, normal.start(), byDay),
+                p95In(category, peak.start(), byDay), normal.errorRatePercent(), peak.errorRatePercent(), retried,
+                peak.errorRatePercent() < 1.0);
+    }
+
+    /** p95 of the storage calls of one category during one day/hour, from Prometheus (null if unknown). */
+    private Double p95In(Category category, Instant start, boolean byDay) {
+        if (!prometheus.available() || start == null) {
+            return null;
+        }
+        java.time.Duration length = byDay ? java.time.Duration.ofDays(1) : java.time.Duration.ofHours(1);
+        Instant end = start.plus(length).isAfter(Instant.now()) ? Instant.now() : start.plus(length);
+        long seconds = Math.max(60, java.time.Duration.between(start, end).toSeconds());
+        Double p95 = prometheus.vector("histogram_quantile(0.95, sum by (le) (increase(%s{category=\"%s\"}[%ds])))"
+                .formatted(BUCKETS, category, seconds), "", end).get("");
+        return p95 == null ? null : p95 * 1000;
+    }
+
+    /** Last 24 h across every replica: latency percentiles, throughput and error rate per backend. */
+    private Map<Backend, Candidate> fromPrometheus(Category category, Map<String, Long> bytes) {
+        String filter = "category=\"%s\"".formatted(category);
+        Instant now = Instant.now();
+        Map<String, Double> ops = prometheus.vector("sum by (backend) (increase(%s{%s}[24h]))".formatted(COUNT, filter), "backend", now);
+        Map<String, Double> errors = prometheus.vector(
+                "sum by (backend) (increase(%s{%s,outcome=\"error\"}[24h]))".formatted(COUNT, filter), "backend", now);
+        Map<String, Double> writeSeconds = prometheus.vector(
+                "sum by (backend) (increase(%s{%s,operation=~\"put|part\"}[24h]))".formatted(SUM, filter), "backend", now);
+        Map<String, Map<String, Double>> quantiles = new java.util.HashMap<>();
+        for (String q : List.of("0.5", "0.95", "0.99")) {
+            quantiles.put(q, prometheus.vector("histogram_quantile(%s, sum by (le, backend) (increase(%s{%s}[24h])))"
+                    .formatted(q, BUCKETS, filter), "backend", now));
+        }
+        Map<Backend, Candidate> result = new EnumMap<>(Backend.class);
+        ops.forEach((name, count) -> {
+            Backend backend;
+            try {
+                backend = Backend.valueOf(name);
+            } catch (IllegalArgumentException e) {
+                return;
+            }
+            long n = Math.round(count);
+            if (n == 0) return;
+            double errorRate = 100.0 * errors.getOrDefault(name, 0.0) / count;
+            Double seconds = writeSeconds.get(name);
+            Long stored = bytes.get(category + "/" + name);
+            Double throughput = stored != null && seconds != null && seconds > 0 ? stored / 1e6 / seconds : null;
+            Double p95 = ms(quantiles.get("0.95").get(name));
+            result.put(backend, new Candidate(backend, ms(quantiles.get("0.5").get(name)), p95,
+                    ms(quantiles.get("0.99").get(name)), throughput, errorRate, null, n,
+                    "Măsurat pe %d operații în 24 h (toate instanțele); p95 %s ms, erori %.2f%%.".formatted(n,
+                            p95 == null ? "—" : "%.0f".formatted(p95), errorRate)));
+        });
+        return result;
+    }
+
+    private static Double ms(Double seconds) {
+        return seconds == null ? null : seconds * 1000;
     }
 }
