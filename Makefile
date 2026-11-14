@@ -4,6 +4,12 @@ DEV     := $(COMPOSE) -f compose.yaml -f compose.dev.yaml
 # exit code fails the target (`up --wait` treats an exited job as an error).
 SERVICES  := postgres minio ftp keycloak
 INIT_JOBS := db-migrate minio-init
+# Started after the backend: metrics, logs, traces, alerts and the entry point.
+PLATFORM  := prometheus blackbox alertmanager mailpit loki alloy tempo grafana proxy
+# The web UI joins the stack as soon as frontend/Dockerfile exists.
+FRONTEND  := $(if $(wildcard frontend/Dockerfile),frontend)
+PROFILES  := $(if $(FRONTEND),--profile frontend)
+PUBLIC_URL = $$(sed -n 's/^FILEGRID_PUBLIC_URL=//p' .env | grep . || echo https://localhost:8443)
 # Builds and tests run in a container: only Docker is needed on the machine.
 MAVEN := docker run --rm -v "$(CURDIR)":/repo -v filegrid-m2:/root/.m2 \
 	-v /var/run/docker.sock:/var/run/docker.sock -e TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal \
@@ -32,17 +38,23 @@ define start
 	@for job in $(INIT_JOBS); do $(1) run --rm $$job || exit 1; done
 endef
 
-up: .env ## Start everything: backend on :8080, Keycloak on :8180 (storages not exposed)
+up: env ## Start everything behind the TLS proxy on https://localhost:8443 (nothing else is published)
 	$(call start,$(COMPOSE))
 	$(COMPOSE) up -d --build --no-deps --wait backend
-	@echo "FileGrid is up: API http://localhost:8080/swagger-ui.html, login http://localhost:8180"
+	$(COMPOSE) $(PROFILES) up -d --build --no-deps --wait $(PLATFORM) $(FRONTEND)
+	@url=$(PUBLIC_URL); echo "FileGrid is up (local CA certificate: accept it once in the browser):"; \
+	echo "  App      $$url/"; echo "  API docs $$url/swagger-ui.html"; \
+	echo "  Login    $$url/auth/realms/filegrid/account/"; \
+	echo "  Grafana  $$url/grafana/   (admin@filegrid.local)"; echo "  Alerts   $$url/mailpit/"
 
-dev: .env ## Start everything except the backend, with storages on 127.0.0.1 (run the backend from your IDE)
+dev: env ## Start everything except the backend, with storages on 127.0.0.1 (run the backend from your IDE)
 	$(call start,$(DEV))
-	@echo "Storages and Keycloak are up; start the backend with: cd backend && ./mvnw spring-boot:run"
+	$(DEV) up -d --no-deps --wait $(PLATFORM)
+	@url=$(PUBLIC_URL); echo "Storages, Keycloak, proxy and observability are up."; \
+	echo "Start the backend with: cd backend && ./mvnw spring-boot:run   (API then at $$url/api/v1)"
 
 down: ## Stop the stack (keeps data)
-	$(DEV) --profile backend-in-docker down
+	$(DEV) --profile backend-in-docker --profile frontend down
 
 ps: ## Show service status
 	$(COMPOSE) ps -a
@@ -63,8 +75,7 @@ demo: ## Walk through a racordare end to end against the running stack (needs `m
 	./scripts/demo-racordare.sh
 
 clean: ## Stop the stack and DELETE all data volumes
-	$(DEV) --profile backend-in-docker down -v
-	$(DEV) down -v
+	$(DEV) --profile backend-in-docker --profile frontend down -v
 
 gen-data: ## Generate regional fault JSONs (1-10 MB) and drone MP4 videos (GEN_ARGS=...)
 	python3 backend/fault_videos/fault_videos.py generate $(GEN_ARGS)

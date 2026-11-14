@@ -27,9 +27,10 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          # Tokens carry the public issuer; keys are fetched over the internal network.
-          issuer-uri: ${FILEGRID_OIDC_ISSUER:http://localhost:8180/realms/filegrid}
-          jwk-set-uri: ${FILEGRID_OIDC_JWKS_URI:http://localhost:8180/realms/filegrid/protocol/openid-connect/certs}
+          # Tokens carry the public issuer (Keycloak behind the proxy); keys are fetched
+          # over plain HTTP from Keycloak directly (`make dev` publishes it on 8180).
+          issuer-uri: ${FILEGRID_OIDC_ISSUER:https://localhost:8443/auth/realms/filegrid}
+          jwk-set-uri: ${FILEGRID_OIDC_JWKS_URI:http://localhost:8180/auth/realms/filegrid/protocol/openid-connect/certs}
           audiences: filegrid-api
 
 server:
@@ -56,11 +57,15 @@ management:
   tracing:
     sampling:
       probability: 1.0
+    export:
+      otlp:
+        # compose turns this on and points it at Tempo.
+        enabled: ${FILEGRID_TRACE_EXPORT:false}
   opentelemetry:
     tracing:
       export:
-        # Turned on once the observability stack (collector/Tempo) is added.
-        enabled: ${FILEGRID_TRACE_EXPORT:false}
+        otlp:
+          endpoint: ${FILEGRID_OTLP_TRACES_ENDPOINT:http://localhost:4318/v1/traces}
   otlp:
     metrics:
       export:

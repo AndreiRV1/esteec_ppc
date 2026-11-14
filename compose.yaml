@@ -1,9 +1,10 @@
-# FileGrid: backend API, Keycloak (auth) and the three storages:
-# PostgreSQL, MinIO (S3) and vsftpd (FTP).
+# FileGrid: reverse proxy (the only published port), backend API, Keycloak,
+# the three storages (PostgreSQL, MinIO/S3, vsftpd/FTP) and observability
+# (Prometheus, Alertmanager, Loki, Tempo, Grafana).
 #
-# Only the backend and Keycloak publish ports (on 127.0.0.1). The storages are
-# reachable solely from the `backend` network, i.e. through FileGrid. For
-# running the backend from an IDE, layer compose.dev.yaml on top (see README.md).
+# Networks keep the pieces apart: the proxy sits on `edge` and cannot reach a
+# storage; storages live on `backend` and are reachable only through FileGrid.
+# For running the backend from an IDE, layer compose.dev.yaml on top (README.md).
 name: filegrid
 
 x-logging: &default-logging
@@ -125,11 +126,14 @@ services:
       KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
       KC_DB_USERNAME: keycloak
       KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?missing - run `make env`}
-      # Public URL: the token issuer. Backchannel (backend -> keycloak:8080) stays internal.
-      KC_HOSTNAME: http://localhost:${KEYCLOAK_HOST_PORT:-8180}
+      # Public URL (through the proxy): the token issuer. Backchannel calls
+      # (backend/grafana -> keycloak:8080) stay on the internal network.
+      KC_HOSTNAME: ${FILEGRID_PUBLIC_URL:-https://localhost:8443}/auth
+      KC_HTTP_RELATIVE_PATH: /auth
       KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
-      # TLS is terminated by the reverse proxy that will front FileGrid.
+      # TLS is terminated by the reverse proxy, which sets X-Forwarded-*.
       KC_HTTP_ENABLED: "true"
+      KC_PROXY_HEADERS: xforwarded
       KC_HEALTH_ENABLED: "true"
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?missing - run `make env`}
@@ -137,13 +141,13 @@ services:
       FILEGRID_ADMIN_PASSWORD: ${FILEGRID_ADMIN_PASSWORD:?missing - run `make env`}
       FILEGRID_DEMO_CLIENT_PASSWORD: ${FILEGRID_DEMO_CLIENT_PASSWORD:?missing - run `make env`}
       FILEGRID_DEMO_EMPLOYEE_PASSWORD: ${FILEGRID_DEMO_EMPLOYEE_PASSWORD:?missing - run `make env`}
+      FILEGRID_PUBLIC_URL: ${FILEGRID_PUBLIC_URL:-https://localhost:8443}
+      GRAFANA_OAUTH_CLIENT_SECRET: ${GRAFANA_OAUTH_CLIENT_SECRET:?missing - run `make env`}
     volumes:
       - ./infra/keycloak/realm:/opt/keycloak/data/import:ro
-    ports:
-      - "127.0.0.1:${KEYCLOAK_HOST_PORT:-8180}:8080"
     healthcheck:
       # No curl in the image: plain HTTP over bash's /dev/tcp to the management port.
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && grep -q '\"UP\"' <&3"]
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /auth/health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && grep -q '\"UP\"' <&3"]
       interval: 10s
       timeout: 5s
       retries: 30
@@ -151,7 +155,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    networks: [backend]
+    networks: [backend, edge]
     logging: *default-logging
 
   backend:
@@ -169,16 +173,17 @@ services:
       FILEGRID_FTP_PORT: "21"
       FTP_USER: ${FTP_USER:?missing - run `make env`}
       FTP_PASSWORD: ${FTP_PASSWORD:?missing - run `make env`}
-      FILEGRID_OIDC_ISSUER: http://localhost:${KEYCLOAK_HOST_PORT:-8180}/realms/filegrid
-      FILEGRID_OIDC_JWKS_URI: http://keycloak:8080/realms/filegrid/protocol/openid-connect/certs
+      FILEGRID_OIDC_ISSUER: ${FILEGRID_PUBLIC_URL:-https://localhost:8443}/auth/realms/filegrid
+      FILEGRID_OIDC_JWKS_URI: http://keycloak:8080/auth/realms/filegrid/protocol/openid-connect/certs
       FILEGRID_MASTER_KEY_V1: ${FILEGRID_MASTER_KEY_V1:?missing - run `make env`}
       FILEGRID_IDENTITY_PEPPER: ${FILEGRID_IDENTITY_PEPPER:?missing - run `make env`}
       FILEGRID_METER_API_KEY: ${FILEGRID_METER_API_KEY:?missing - run `make env`}
-      # JSON logs, ready for Loki.
+      # JSON logs for Loki, traces for Tempo.
       LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
-    ports:
-      - "127.0.0.1:${BACKEND_HOST_PORT:-8080}:8080"
-      # 8081 (actuator: health, prometheus) is deliberately not published.
+      FILEGRID_TRACE_EXPORT: "true"
+      FILEGRID_OTLP_TRACES_ENDPOINT: http://tempo:4318/v1/traces
+    # No published port: 8080 is reached through the proxy, 8081 (actuator) only by
+    # Prometheus. That also lets `docker compose up --scale backend=N` work.
     depends_on:
       postgres:
         condition: service_healthy
@@ -188,13 +193,212 @@ services:
         condition: service_completed_successfully
       ftp:
         condition: service_healthy
-    networks: [backend]
+    networks: [backend, edge, observability]
+    logging: *default-logging
+
+
+  # ---------------------------------------------------------------------------
+  # Entry point
+  # ---------------------------------------------------------------------------
+
+  # The only service with a published port. Terminates TLS and routes
+  # /api -> backend, /auth -> keycloak, /grafana -> grafana, the rest -> frontend.
+  proxy:
+    image: caddy:2.11.9-alpine@sha256:003a97808e781aa9f7e75cc2f43d34d461099031faf5e20faefb9f61126836f0
+    restart: unless-stopped
+    # The certificate is issued for the host name in FILEGRID_PUBLIC_URL.
+    command:
+      - sh
+      - -c
+      - |
+        host=$${FILEGRID_PUBLIC_URL#*://}
+        export FILEGRID_SITE_HOST=$${host%%[:/]*}
+        exec caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
+    environment:
+      FILEGRID_PUBLIC_URL: ${FILEGRID_PUBLIC_URL:-https://localhost:8443}
+    volumes:
+      - ./infra/proxy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./infra/proxy/placeholder:/srv/placeholder:ro
+      # Keeps the local CA, so the certificate survives restarts.
+      - proxy-data:/data
+    ports:
+      # PROXY_HOST_PORT must be the port used in FILEGRID_PUBLIC_URL.
+      - "${PROXY_BIND:-127.0.0.1}:${PROXY_HOST_PORT:-8443}:8443"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [edge]
+    logging: *default-logging
+
+  # Built only when the directory exists (`make up` adds --profile frontend).
+  # Contract: static site listening on 8080, no API calls of its own.
+  frontend:
+    profiles: ["frontend"]
+    build: ./frontend
+    image: filegrid/frontend:local
+    restart: unless-stopped
+    networks: [edge]
+    logging: *default-logging
+
+  # ---------------------------------------------------------------------------
+  # Observability (nothing here is published; Grafana is reached at /grafana/)
+  # ---------------------------------------------------------------------------
+
+  prometheus:
+    image: prom/prometheus:v3.16.0@sha256:e04987641b57704f408e31f6373ba4138ecf27cb4a165d24aabb6c38fddd0f06
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+    volumes:
+      - ./infra/observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/observability/prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus-data:/prometheus
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9090/-/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    # Not on the `backend` network: it reaches the backend's actuator port over
+    # `observability`, and the storages only through the blackbox probes.
+    networks: [observability]
+    logging: *default-logging
+
+  # Probes the three storages (is each one reachable at all?).
+  blackbox:
+    image: prom/blackbox-exporter:v0.29.1@sha256:ea1c7aa3ef3f307cd03e85f34abb604478ccb90b567fc690da0cd9776da76b13
+    restart: unless-stopped
+    command: ["--config.file=/etc/blackbox/blackbox.yml"]
+    volumes:
+      - ./infra/observability/blackbox/blackbox.yml:/etc/blackbox/blackbox.yml:ro
+    networks: [backend, observability]
+    logging: *default-logging
+
+  alertmanager:
+    image: prom/alertmanager:v0.35.0@sha256:e638797febd034838eca8b98cdbd46f951e9bf7f178777aa8669167406a9946c
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+    volumes:
+      - ./infra/observability/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/alertmanager
+    networks: [observability]
+    logging: *default-logging
+
+  # Local inbox for alert e-mails (<public url>/mailpit/, operators only).
+  mailpit:
+    image: axllent/mailpit:v1.33.1@sha256:aef2aacc11f075ec0fb6874275ee4a421e688e11a96ebb296134d1735c7761ce
+    restart: unless-stopped
+    environment:
+      MP_WEBROOT: mailpit
+      MP_SMTP_AUTH_ACCEPT_ANY: "true"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "true"
+      MP_MAX_MESSAGES: "500"
+    networks: [edge, observability]
+    logging: *default-logging
+
+  loki:
+    image: grafana/loki:3.7.10@sha256:b43c257ccfc925d4a50b8717cac61a3b51df8c48d01847936057e5c4075a24a7
+    restart: unless-stopped
+    command: ["-config.file=/etc/loki/loki.yml"]
+    volumes:
+      - ./infra/observability/loki/loki.yml:/etc/loki/loki.yml:ro
+      - loki-data:/loki
+    networks: [observability]
+    logging: *default-logging
+
+  # Reads this project's container logs from the Docker socket and ships them to Loki.
+  alloy:
+    image: grafana/alloy:v1.22.0@sha256:9acc2529bc1edb7f5b2bd801dd8334ebc80c158e3a9e5526ecd7c9a273d43189
+    restart: unless-stopped
+    command: ["run", "--storage.path=/var/lib/alloy/data", "/etc/alloy/config.alloy"]
+    environment:
+      COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-filegrid}
+    volumes:
+      - ./infra/observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - alloy-data:/var/lib/alloy/data
+    depends_on: [loki]
+    networks: [observability]
+    logging: *default-logging
+
+  tempo:
+    image: grafana/tempo:3.0.0@sha256:1ce31d6d7ffab62189685e8c47881d4a561c5d38bd0dbd66e40ca83cef07923d
+    restart: unless-stopped
+    command: ["-config.file=/etc/tempo/tempo.yml"]
+    volumes:
+      - ./infra/observability/tempo/tempo.yml:/etc/tempo/tempo.yml:ro
+      - tempo-data:/var/tempo
+    networks: [observability]
+    logging: *default-logging
+
+  grafana:
+    image: grafana/grafana:13.3.1@sha256:0615ec4fbd4072004b7d86b46ded63013a74b7d6eb1119273dd89e8fa25c13cf
+    restart: unless-stopped
+    environment:
+      GF_SERVER_ROOT_URL: ${FILEGRID_PUBLIC_URL:-https://localhost:8443}/grafana/
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      # The admin page of the frontend embeds dashboards (same origin only: see the proxy).
+      GF_SECURITY_ALLOW_EMBEDDING: "true"
+      GF_SECURITY_COOKIE_SECURE: "true"
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?missing - run `make env`}
+      # Login only through Keycloak, and only for the realm role `admin`.
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_AUTH_BASIC_ENABLED: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_AUTH_OAUTH_AUTO_LOGIN: "true"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_GENERIC_OAUTH_ENABLED: "true"
+      GF_AUTH_GENERIC_OAUTH_NAME: FileGrid (Keycloak)
+      GF_AUTH_GENERIC_OAUTH_CLIENT_ID: filegrid-grafana
+      GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET: ${GRAFANA_OAUTH_CLIENT_SECRET:?missing - run `make env`}
+      GF_AUTH_GENERIC_OAUTH_SCOPES: openid profile email
+      GF_AUTH_GENERIC_OAUTH_USE_PKCE: "true"
+      GF_AUTH_GENERIC_OAUTH_ALLOW_SIGN_UP: "true"
+      # The browser goes through the proxy; Grafana itself talks to Keycloak internally.
+      GF_AUTH_GENERIC_OAUTH_AUTH_URL: ${FILEGRID_PUBLIC_URL:-https://localhost:8443}/auth/realms/filegrid/protocol/openid-connect/auth
+      GF_AUTH_GENERIC_OAUTH_TOKEN_URL: http://keycloak:8080/auth/realms/filegrid/protocol/openid-connect/token
+      GF_AUTH_GENERIC_OAUTH_API_URL: http://keycloak:8080/auth/realms/filegrid/protocol/openid-connect/userinfo
+      GF_AUTH_SIGNOUT_REDIRECT_URL: ${FILEGRID_PUBLIC_URL:-https://localhost:8443}/auth/realms/filegrid/protocol/openid-connect/logout
+      GF_AUTH_GENERIC_OAUTH_LOGIN_ATTRIBUTE_PATH: preferred_username
+      # Strict: a user without the `admin` realm role gets no Grafana role and is refused.
+      GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_PATH: contains(roles[*], 'admin') && 'Admin'
+      GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_STRICT: "true"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/dashboards/filegrid-overview.json
+    volumes:
+      - ./infra/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/observability/grafana/dashboards:/etc/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/grafana/api/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    networks: [edge, observability]
     logging: *default-logging
 
 networks:
+  # proxy <-> backend, keycloak, grafana, frontend
+  edge:
+  # storages and the services allowed to reach them
   backend:
+  # metrics, logs, traces
+  observability:
 
 volumes:
   pg-data:
   minio-data:
   ftp-data:
+  proxy-data:
+  prometheus-data:
+  alertmanager-data:
+  loki-data:
+  alloy-data:
+  tempo-data:
+  grafana-data:

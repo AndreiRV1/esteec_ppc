@@ -3,6 +3,10 @@
 # Never use this file on a shared or public machine.
 #
 #   make dev   (starts everything except the backend container)
+#
+# The proxy still serves https://localhost:8443: /api is forwarded to the
+# backend on the host (port BACKEND_HOST_PORT), so URLs and the token issuer
+# are the same as in `make up`.
 services:
   backend:
     # In this mode the backend runs on the host: FTP passive replies point at
@@ -26,3 +30,22 @@ services:
     ports:
       - "127.0.0.1:${FTP_HOST_PORT:-2121}:21"
       - "127.0.0.1:21100-21119:21100-21119"
+
+  keycloak:
+    ports:
+      # Direct access for the host backend (JWKS) and for Keycloak administration.
+      - "127.0.0.1:${KEYCLOAK_HOST_PORT:-8180}:8080"
+
+  proxy:
+    environment:
+      BACKEND_HOST: host.docker.internal
+      BACKEND_PORT: ${BACKEND_HOST_PORT:-8080}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  prometheus:
+    volumes:
+      # Scrape the backend running on the host (management port 8081).
+      - ./infra/observability/prometheus/targets-dev:/etc/prometheus/targets:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

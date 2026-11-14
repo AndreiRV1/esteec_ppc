@@ -55,11 +55,11 @@
       "implicitFlowEnabled": false,
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
-      "redirectUris": ["http://localhost:4200/*"],
-      "webOrigins": ["http://localhost:4200"],
+      "redirectUris": ["${FILEGRID_PUBLIC_URL}/*", "http://localhost:4200/*"],
+      "webOrigins": ["${FILEGRID_PUBLIC_URL}", "http://localhost:4200"],
       "attributes": {
         "pkce.code.challenge.method": "S256",
-        "post.logout.redirect.uris": "http://localhost:4200/*"
+        "post.logout.redirect.uris": "${FILEGRID_PUBLIC_URL}/*##http://localhost:4200/*"
       },
       "protocolMappers": [
         {
@@ -72,6 +72,39 @@
             "access.token.claim": "true",
             "id.token.claim": "false",
             "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "filegrid-grafana",
+      "name": "Grafana (monitoring, realm role admin only)",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "${GRAFANA_OAUTH_CLIENT_SECRET}",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["${FILEGRID_PUBLIC_URL}/grafana/login/generic_oauth"],
+      "webOrigins": ["${FILEGRID_PUBLIC_URL}"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "${FILEGRID_PUBLIC_URL}/*"
+      },
+      "protocolMappers": [
+        {
+          "name": "realm-roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "roles",
+            "jsonType.label": "String",
+            "multivalued": "true",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
           }
         }
       ]

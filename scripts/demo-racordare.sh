@@ -11,13 +11,23 @@ for tool in curl jq shasum; do
   command -v "$tool" >/dev/null || { echo "$tool is required" >&2; exit 1; }
 done
 set -a
-. ./.env
+. "${FILEGRID_ENV_FILE:-./.env}"
 set +a
 
-API="http://localhost:${BACKEND_HOST_PORT:-8080}/api/v1"
-TOKEN_URL="http://localhost:${KEYCLOAK_HOST_PORT:-8180}/realms/filegrid/protocol/openid-connect/token"
+# Everything goes through the TLS proxy (the single entry point).
+BASE="${FILEGRID_PUBLIC_URL:-https://localhost:8443}"
+API="$BASE/api/v1"
+TOKEN_URL="$BASE/auth/realms/filegrid/protocol/openid-connect/token"
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
+
+# The proxy's certificate is signed by its own local CA: fetch that CA and verify
+# against it. A certificate from a public CA needs no extra option.
+TLS_OPT=""
+if docker compose cp proxy:/data/caddy/pki/authorities/local/root.crt "$WORK/ca.crt" >/dev/null 2>&1; then
+  TLS_OPT="--cacert $WORK/ca.crt"
+fi
+curl() { command curl $TLS_OPT "$@"; }
 
 step() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 
