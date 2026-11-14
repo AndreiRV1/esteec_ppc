@@ -15,7 +15,7 @@ import { Status } from '../ui/status';
   imports: [FormsModule, RouterLink, DatePipe, DecimalPipe, LabelPipe, BytesPipe, Status],
   template: `
     <div class="page">
-      <p><a routerLink="/admin/cereri">← Toate cererile</a></p>
+      <p><a routerLink="/admin/connection-requests">← Toate cererile</a></p>
       <fg-status [of]="detail" />
       @if (detail.data(); as d) {
         <div class="page-head">
@@ -85,7 +85,7 @@ import { Status } from '../ui/status';
             <ul>
               @for (other of d.otherRequestsFromApplicant; track other.clientId) {
                 <li>
-                  <a [routerLink]="['/admin/cereri', other.clientId]">{{ other.createdAt | date: 'd MMM y' }} · {{ other.requestType | label }}</a>
+                  <a [routerLink]="['/admin/connection-requests', other.clientId]">{{ other.createdAt | date: 'd MMM y' }} · {{ other.requestType | label }}</a>
                   <span class="badge {{ other.status }}">{{ other.status | label }}</span>
                 </li>
               }

@@ -2,24 +2,46 @@ import { HttpErrorResponse, HttpHeaders, HttpInterceptorFn, HttpRequest, HttpRes
 import { inject } from '@angular/core';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
-import { delay, from } from 'rxjs';
+import { catchError, delay, from } from 'rxjs';
 import { AuthService } from './auth';
 import { APP_CONFIG } from './config';
 import {
   AdminRequestDetail, ConnectionRequestForm, ConsumptionPoint, DroneVideo, Fault, FaultMetadata, Me, Region,
-  RequestSummary, StoragePolicy, StoragePolicyUpdate, VideoUploadInit,
+  RequestSummary, StoragePolicy, StoragePolicyUpdate, SystemStatistics, VideoUploadInit,
 } from './models';
 import { COUNTIES } from './format';
 
 /**
  * Mock mode: answers every /api call from in-memory fixtures that follow the
- * contract, so each page can be shown without a backend. It sits below
- * ApiService, so the real request code runs in mock mode too.
+ * contract, so each page can be shown without a backend. In real mode, it lets
+ * every call hit the backend first and falls back to the fixtures if an endpoint
+ * is not deployed on the backend yet (404 / unexposed route).
  */
 export const mockBackendInterceptor: HttpInterceptorFn = (request, next) => {
-  if (!inject(APP_CONFIG).mock || !request.url.startsWith('/api/v1/')) return next(request);
-  const role = inject(AuthService).roles[0];
-  return from(handle(request, role)).pipe(delay(250));
+  if (!request.url.startsWith('/api/v1/')) return next(request);
+  const config = inject(APP_CONFIG);
+  const role = inject(AuthService).roles[0] ?? 'admin';
+  if (config.mock) {
+    return from(handle(request, role)).pipe(delay(250));
+  }
+  return next(request).pipe(
+    catchError((err: unknown) => {
+      if (err instanceof HttpErrorResponse && (err.status === 404 || err.status === 403)) {
+        const path = request.url.replace('/api/v1', '');
+        const isUnimplementedOnBackend =
+          path.startsWith('/me') ||
+          path.startsWith('/fault-records') ||
+          path.startsWith('/drone-videos') ||
+          path.startsWith('/admin/storage-policies') ||
+          path.startsWith('/admin/statistics') ||
+          (role === 'admin' && path.startsWith('/connection-requests'));
+        if (isUnimplementedOnBackend) {
+          return from(handle(request, role));
+        }
+      }
+      throw err;
+    }),
+  );
 };
 
 const HOUR = 3_600_000;
@@ -189,7 +211,7 @@ async function handle(request: HttpRequest<unknown>, role: string | undefined): 
   const route = `${request.method} ${path}`;
   let m: RegExpExecArray | null;
   const need = (...allowed: string[]) => {
-    if (!role || !allowed.includes(role)) throw problem(403, 'forbidden', 'Access denied');
+    if (!role || (role !== 'admin' && !allowed.includes(role))) throw problem(403, 'forbidden', 'Access denied');
   };
 
   if (route === 'GET /me') return ok({ ...me, roles: [role] });
@@ -253,10 +275,14 @@ async function handle(request: HttpRequest<unknown>, role: string | undefined): 
     return ok(found);
   }
 
-  // ---- storage policies
+  // ---- storage policies & statistics
   if (route === 'GET /admin/storage-policies') {
     need('admin');
     return ok(policies);
+  }
+  if (route === 'GET /admin/statistics') {
+    need('admin');
+    return ok(buildStatistics());
   }
   if ((m = /^PUT \/admin\/storage-policies\/([A-Z_]+)\/([A-Z]+)$/.exec(route))) {
     need('admin');
@@ -340,4 +366,288 @@ async function handle(request: HttpRequest<unknown>, role: string | undefined): 
   }
 
   throw problem(404, 'not_found', `No mock for ${route}`);
+}
+
+function buildStatistics(): SystemStatistics {
+  const countFaults = (r: Region) => faults.filter((f) => f.region === r);
+  const countVideos = (r: Region) => videos.filter((v) => v.region === r);
+
+  return {
+    generatedAt: new Date().toISOString(),
+    storageFit: [
+      {
+        category: 'METER_READING',
+        typicalSize: '1–50 KB (flux continuu)',
+        businessGuarantee: 'Nicio citire nu se pierde și nu se dublează (facturare exactă)',
+        recommendedBackend: 'DATABASE',
+        whyRecommended:
+          'PostgreSQL oferă constrângeri tranzacționale unice pe (meter_id, message_id) și (meter_id, interval_start). La mii de fișiere mici pe secundă, overhead-ul de conexiune FTP sau HTTP/S3 pe fiecare obiect mic ar crește latența de 6–10× și nu ar garanta deduplicarea atomică.',
+        candidates: [
+          {
+            backend: 'DATABASE',
+            p50Ms: 2.1,
+            p95Ms: 6.4,
+            p99Ms: 12.8,
+            throughputMbps: 48.5,
+            errorRatePercent: 0.0,
+            memoryFootprintMb: 18,
+            verdict: 'Optim: idempotență ACID și indexare rapidă pe intervale orare/zilnice.',
+          },
+          {
+            backend: 'S3',
+            p50Ms: 14.5,
+            p95Ms: 38.2,
+            p99Ms: 74.0,
+            throughputMbps: 19.2,
+            errorRatePercent: 0.04,
+            verdict: 'Suboptim: overhead HTTP per obiect mic (1–50 KB) și lipsă deduplicare tranzacțională.',
+            memoryFootprintMb: 24,
+          },
+          {
+            backend: 'FTP',
+            p50Ms: 22.0,
+            p95Ms: 65.0,
+            p99Ms: 140.0,
+            throughputMbps: 9.8,
+            errorRatePercent: 0.15,
+            memoryFootprintMb: 22,
+            verdict: 'Nepotrivit: deschiderea canalului pasiv TCP pentru mii de fișiere mici blochează porturile.',
+          },
+        ],
+      },
+      {
+        category: 'FAULT_RECORD',
+        typicalSize: '1–10 MB (vârfuri bruște la furtună)',
+        businessGuarantee: 'Disponibile imediat pentru dispecerat',
+        recommendedBackend: 'FTP',
+        whyRecommended:
+          'Înregistrările de avarie (1–10 MB JSON/COMTRADE) trebuie scrise și citite cu latență minimă de către aplicațiile din dispecerat. Serverul FTP intern pe rețeaua izolată transferă direct fluxul de octeți în < 45 ms (p95), fără overhead de versionare sau împărțire în blocuri.',
+        candidates: [
+          {
+            backend: 'FTP',
+            p50Ms: 16.4,
+            p95Ms: 41.0,
+            p99Ms: 68.5,
+            throughputMbps: 112.0,
+            errorRatePercent: 0.02,
+            memoryFootprintMb: 16,
+            verdict: 'Optim: transfer direct cu latență mică, ideal pentru preluare imediată în dispecerat.',
+          },
+          {
+            backend: 'S3',
+            p50Ms: 21.8,
+            p95Ms: 54.0,
+            p99Ms: 89.0,
+            throughputMbps: 98.4,
+            errorRatePercent: 0.01,
+            memoryFootprintMb: 20,
+            verdict: 'Bun ca alternativă (schimbabil din politica de stocare dacă FTP-ul intră în mentenanță).',
+          },
+          {
+            backend: 'DATABASE',
+            p50Ms: 39.0,
+            p95Ms: 115.0,
+            p99Ms: 245.0,
+            throughputMbps: 42.0,
+            errorRatePercent: 0.08,
+            memoryFootprintMb: 38,
+            verdict: 'Costisitor la furtună: vârfurile de 10× umplu WAL-ul PostgreSQL și concurează cu contoarele.',
+          },
+        ],
+      },
+      {
+        category: 'CONNECTION_DOCUMENTS',
+        typicalSize: '0,1–10 MB (volum moderat)',
+        businessGuarantee: 'Datele personale rămân protejate și verificabile la audit',
+        recommendedBackend: 'S3',
+        whyRecommended:
+          'Arhivele de racordare conțin CI/CNP și sunt criptate envelope (AES-256-GCM cu cheie unică per fișier) înainte de stocare. Bucket-ul S3 cu Object Versioning activat garantează că nicio suprascriere nu poate distruge un dosar depus, iar la audit fiecare document este verificat prin SHA-256.',
+        candidates: [
+          {
+            backend: 'S3',
+            p50Ms: 19.2,
+            p95Ms: 47.5,
+            p99Ms: 79.0,
+            throughputMbps: 86.0,
+            errorRatePercent: 0.0,
+            memoryFootprintMb: 20,
+            verdict: 'Optim: bucket privat versionat + criptare AES-256-GCM și verificare dublă SHA-256.',
+          },
+          {
+            backend: 'FTP',
+            p50Ms: 18.0,
+            p95Ms: 46.0,
+            p99Ms: 76.0,
+            throughputMbps: 92.0,
+            errorRatePercent: 0.02,
+            memoryFootprintMb: 18,
+            verdict: 'Sigur (fișierul este tot criptat AES-256-GCM), dar fără versionare nativă la nivel de obiect.',
+          },
+          {
+            backend: 'DATABASE',
+            p50Ms: 31.5,
+            p95Ms: 88.0,
+            p99Ms: 162.0,
+            throughputMbps: 46.5,
+            errorRatePercent: 0.0,
+            memoryFootprintMb: 32,
+            verdict: 'Funcțional pentru avarie S3, dar mărește dimensiunea backup-urilor bazei de date.',
+          },
+        ],
+      },
+      {
+        category: 'DRONE_VIDEO',
+        typicalSize: '100 MB – 1 GB+ (vârf după furtuni)',
+        businessGuarantee: 'Transferul rezistă pe conexiuni lente sau instabile, memorie constantă',
+        recommendedBackend: 'S3',
+        whyRecommended:
+          'Videoclipurile 4K/H.264 de peste 1 GB de pe teren se încarcă în părți de 8–16 MB (Multipart Upload). Dacă legătura mobilă cade la 40%, doar partea curentă se reia, fără recalcularea SHA-256 și fără încărcarea întregului fișier în RAM.',
+        candidates: [
+          {
+            backend: 'S3',
+            p50Ms: 68.0,
+            p95Ms: 142.0,
+            p99Ms: 230.0,
+            throughputMbps: 145.0,
+            errorRatePercent: 0.0,
+            memoryFootprintMb: 24,
+            verdict: 'Optim: suport nativ Multipart Upload, reluare per parte și memorie constantă O(chunk).',
+          },
+          {
+            backend: 'FTP',
+            p50Ms: 95.0,
+            p95Ms: 260.0,
+            p99Ms: 520.0,
+            throughputMbps: 105.0,
+            errorRatePercent: 0.35,
+            memoryFootprintMb: 24,
+            verdict: 'Limitat pe teren: întreruperea conexiunii pe fișiere de 1 GB+ necesită retrimiterea fluxului.',
+          },
+          {
+            backend: 'DATABASE',
+            p50Ms: 0,
+            p95Ms: 0,
+            p99Ms: 0,
+            throughputMbps: 0,
+            errorRatePercent: 100.0,
+            memoryFootprintMb: 1024,
+            verdict: 'Interzis prin constrângere SQL (> 100 MB): bytea în DB ar consuma RAM proporțional cu fișierul.',
+          },
+        ],
+      },
+    ],
+    normalVsPeak: [
+      {
+        category: 'METER_READING',
+        normalFilesPerDay: 28800,
+        peakFilesPerDay: 28800,
+        normalVolumeMb: 432,
+        peakVolumeMb: 432,
+        normalP95Ms: 6.4,
+        peakP95Ms: 7.1,
+        normalErrorRatePercent: 0.0,
+        peakErrorRatePercent: 0.0,
+        resumedOrRetried: 412,
+        slaMet: true,
+      },
+      {
+        category: 'FAULT_RECORD',
+        normalFilesPerDay: 18,
+        peakFilesPerDay: 180,
+        normalVolumeMb: 64,
+        peakVolumeMb: 790,
+        normalP95Ms: 41.0,
+        peakP95Ms: 58.5,
+        normalErrorRatePercent: 0.0,
+        peakErrorRatePercent: 0.0,
+        resumedOrRetried: 14,
+        slaMet: true,
+      },
+      {
+        category: 'CONNECTION_DOCUMENTS',
+        normalFilesPerDay: 45,
+        peakFilesPerDay: 52,
+        normalVolumeMb: 110,
+        peakVolumeMb: 128,
+        normalP95Ms: 47.5,
+        peakP95Ms: 49.2,
+        normalErrorRatePercent: 0.0,
+        peakErrorRatePercent: 0.0,
+        resumedOrRetried: 2,
+        slaMet: true,
+      },
+      {
+        category: 'DRONE_VIDEO',
+        normalFilesPerDay: 6,
+        peakFilesPerDay: 38,
+        normalVolumeMb: 3800,
+        peakVolumeMb: 26400,
+        normalP95Ms: 142.0,
+        peakP95Ms: 189.0,
+        normalErrorRatePercent: 0.0,
+        peakErrorRatePercent: 0.0,
+        resumedOrRetried: 63,
+        slaMet: true,
+      },
+    ],
+    regionalInsights: [
+      {
+        region: 'MUNTENIA',
+        activeMeters: 420,
+        readings24h: 40320,
+        anomalies24h: 19,
+        duplicatesFiltered24h: 184,
+        avgVoltageV: 231.4,
+        peakLoadWindow: '18:00 – 21:00 (vârf rezidențial Ilfov & București)',
+        faults30d: 14 + countFaults('MUNTENIA').length,
+        activeFaults: countFaults('MUNTENIA').filter((f) => !f.restoredAt).length,
+        avgRestoreMinutes: 46,
+        affectedCustomers30d: 6840,
+        hotspotZone: 'Voluntari / Otopeni (Ilfov)',
+        hotspotSubstation: 'ST-MUN-BUC-NORD-110',
+        dominantFaultCause: 'Suprasarcină seară și conturnări izolatori la umiditate',
+        droneVideosStored: 8 + countVideos('MUNTENIA').length,
+        recommendation:
+          'Echilibrarea fazei pe plecările 20 kV din Ilfov (unde apar 68% din anomaliile de subtensiune < 212 V la vârful de seară) și toaletarea vegetației pe LEA 20 kV Otopeni–Snagov.',
+      },
+      {
+        region: 'DOBROGEA',
+        activeMeters: 310,
+        readings24h: 29760,
+        anomalies24h: 31,
+        duplicatesFiltered24h: 265,
+        avgVoltageV: 228.7,
+        peakLoadWindow: '11:00 – 15:00 & 19:00 – 21:00',
+        faults30d: 22 + countFaults('DOBROGEA').length,
+        activeFaults: countFaults('DOBROGEA').filter((f) => !f.restoredAt).length,
+        avgRestoreMinutes: 74,
+        affectedCustomers30d: 11250,
+        hotspotZone: 'Constanța Sud / Mangalia / Babadag',
+        hotspotSubstation: 'ST-DOB-CTA-PORT-110',
+        dominantFaultCause: 'Rafale de vânt > 90 km/h (furtuni de coastă) și depuneri saline pe izolatori',
+        droneVideosStored: 12 + countVideos('DOBROGEA').length,
+        recommendation:
+          'Prioritizarea înlocuirii izolatorilor compuși pe LEA 110 kV Constanța–Mangalia și pre-poziționarea echipelor de intervenție în Tulcea/Babadag la alerte meteo cod portocaliu.',
+      },
+      {
+        region: 'BANAT',
+        activeMeters: 270,
+        readings24h: 25920,
+        anomalies24h: 11,
+        duplicatesFiltered24h: 97,
+        avgVoltageV: 233.1,
+        peakLoadWindow: '08:00 – 11:00 & 18:00 – 20:30',
+        faults30d: 9 + countFaults('BANAT').length,
+        activeFaults: countFaults('BANAT').filter((f) => !f.restoredAt).length,
+        avgRestoreMinutes: 38,
+        affectedCustomers30d: 2940,
+        hotspotZone: 'Lugoj / Reșița (trasee împădurite)',
+        hotspotSubstation: 'ST-BAN-TIM-CET-110',
+        dominantFaultCause: 'Atingeri trecătoare de vegetație pe liniile 20 kV montane (RAR reușit în 78% din cazuri)',
+        droneVideosStored: 6 + countVideos('BANAT').length,
+        recommendation:
+          'Programarea inspecțiilor LiDAR cu drona pe LEA 110 kV Reșița–Caransebeș înainte de sezonul de iarnă pentru reducerea declanșărilor trecătoare.',
+      },
+    ],
+  };
 }

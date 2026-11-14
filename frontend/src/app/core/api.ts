@@ -5,8 +5,8 @@ import { AuthService } from './auth';
 import {
   AdminRequestDetail, Bucket, ConnectionFiles, ConnectionRequestForm, Consumption, ConsumptionSummary, Decision,
   DroneVideo, Fault, FaultFilter, FaultMetadata, FileCategory, Me, Page, Problem, Region, RequestFilter,
-  RequestSummary, StoragePolicy, StoragePolicyUpdate, StoredRef, UploadSession, UploadStatus, VideoFilter,
-  VideoUploadInit,
+  RequestSummary, StoragePolicy, StoragePolicyUpdate, StoredRef, SystemStatistics, UploadSession, UploadStatus,
+  VideoFilter, VideoUploadInit,
 } from './models';
 import { sha256OfBlob } from './sha256';
 
@@ -64,10 +64,11 @@ export class ApiService {
   downloadDocument = (clientId: string, documentId: string) =>
     this.download(`/admin/connection-requests/${clientId}/documents/${documentId}`);
 
-  // ---- storage policy --------------------------------------------------------
+  // ---- storage policy & statistics -------------------------------------------
   storagePolicies = () => this.get<StoragePolicy[]>('/admin/storage-policies');
   updateStoragePolicy = (category: FileCategory, region: Region, body: StoragePolicyUpdate) =>
     firstValueFrom(this.http.put<StoragePolicy | null>(`${BASE}/admin/storage-policies/${category}/${region}`, body));
+  statistics = () => this.get<SystemStatistics>('/admin/statistics');
 
   // ---- fault records ---------------------------------------------------------
   createFault(metadata: FaultMetadata, file: File): Promise<StoredRef> {

@@ -20,15 +20,15 @@ export class AuthService {
   ) {}
 
   hasRole(role: Role): boolean {
-    return this.roles.includes(role);
+    return this.roles.includes('admin') || this.roles.includes(role);
   }
 
   /** Landing page for this user: the area of their most privileged role. */
   home(): string {
-    if (this.hasRole('admin')) return '/admin/cereri';
-    if (this.hasRole('employee')) return '/angajat/avarii';
-    if (this.hasRole('client')) return '/client';
-    return '/fara-acces';
+    if (this.roles.includes('admin')) return '/admin/connection-requests';
+    if (this.roles.includes('employee')) return '/employee/fault-records';
+    if (this.roles.includes('client')) return '/client';
+    return '/no-access';
   }
 }
 

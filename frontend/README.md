@@ -45,7 +45,15 @@ platform must route `/api` and `/grafana` on the same origin.
 
 ## Structure
 
-- `src/app/core/api.ts`: the only file that knows the API's URLs and shapes.
-- `src/app/core/mock-backend.ts`: mock mode, an HTTP interceptor with fixtures.
+- `src/app/core/api.ts`: the only file that knows the API's URLs (`/api/v1/...`) and shapes.
+- `src/app/core/mock-backend.ts`: mock mode (and fallback for backend routes not yet deployed), an HTTP interceptor with fixtures.
 - `src/app/core/chunked-upload.ts`: video upload in parts, with retry and resume.
-- `src/app/{client,admin,employee}`: the pages for each role.
+- `src/app/{client,admin,employee}`: the pages for each role (`admin` has access to all routes):
+  - `/client`: client consumption, load chart, active fault banner, my connection requests
+  - `/connection-requests/new`: submit a connection request with 3 documents
+  - `/admin/connection-requests` & `/admin/connection-requests/:id`: review, download & decide on requests
+  - `/admin/storage-policies`: runtime-configurable storage policy per category & region
+  - `/admin/statistics`: storage fit benchmarks, normal vs. 10x storm spike, and regional grid insights
+  - `/admin/monitoring`: embedded Grafana dashboards
+  - `/employee/fault-records`: upload (with auto-fill from JSON) & search/download fault records
+  - `/employee/drone-videos`: resumable chunked upload & search/download drone inspection videos

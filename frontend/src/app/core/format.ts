@@ -12,6 +12,7 @@ const LABELS: Record<string, string> = {
   AVIZ_AMPLASAMENT: 'Aviz de amplasament', CERTIFICAT_URBANISM: 'Certificat de urbanism',
   CERERE_RACORDARE: 'Cerere de racordare', ACT_IDENTITATE: 'Act de identitate',
   DATABASE: 'Bază de date', S3: 'S3', FTP: 'FTP',
+  METER_READING: 'Citiri contoare',
   FAULT_RECORD: 'Înregistrări de avarie', CONNECTION_DOCUMENTS: 'Documente de racordare',
   DRONE_VIDEO: 'Video-uri dronă',
   NONE: 'Necriptat', AES_256_GCM: 'AES-256-GCM',

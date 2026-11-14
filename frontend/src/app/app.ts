@@ -6,13 +6,14 @@ import { Role } from './core/models';
 interface NavItem { path: string; text: string; role: Role }
 
 const NAV: NavItem[] = [
+  { path: '/admin/connection-requests', text: 'Cereri de racordare', role: 'admin' },
+  { path: '/admin/storage-policies', text: 'Politici de stocare', role: 'admin' },
+  { path: '/admin/statistics', text: 'Statistici și decizii', role: 'admin' },
+  { path: '/admin/monitoring', text: 'Monitorizare', role: 'admin' },
+  { path: '/employee/fault-records', text: 'Avarii', role: 'employee' },
+  { path: '/employee/drone-videos', text: 'Video dronă', role: 'employee' },
+  { path: '/connection-requests/new', text: 'Cerere de racordare', role: 'employee' },
   { path: '/client', text: 'Consumul meu', role: 'client' },
-  { path: '/admin/cereri', text: 'Cereri de racordare', role: 'admin' },
-  { path: '/admin/politici', text: 'Politici de stocare', role: 'admin' },
-  { path: '/admin/monitorizare', text: 'Monitorizare', role: 'admin' },
-  { path: '/angajat/avarii', text: 'Avarii', role: 'employee' },
-  { path: '/angajat/video', text: 'Video dronă', role: 'employee' },
-  { path: '/racordare/noua', text: 'Cerere de racordare', role: 'employee' },
 ];
 
 /** App shell: brand, the navigation for the user's roles, and the session controls. */
