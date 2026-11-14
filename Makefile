@@ -15,7 +15,7 @@ SIM_ARGS  ?=
 
 .DEFAULT_GOAL := help
 .PHONY: help env up dev down ps logs psql migrate test demo clean \
-	gen-data gen-storm gen-large-video seed-data verify-data data-status sim-build seed sim
+	gen-data gen-storm gen-large-video seed-data verify-data data-status sim-build seed seed-clients sim
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-16s %s\n", $$1, $$2}'
@@ -66,22 +66,22 @@ clean: ## Stop the stack and DELETE all data volumes
 	$(DEV) --profile backend-in-docker down -v
 	$(DEV) down -v
 
-gen-data: ## Generate regional fault JSONs (1-10 MB) and drone MP4 videos
-	python3 backend/fault_videos/fault_videos.py generate
+gen-data: ## Generate regional fault JSONs (1-10 MB) and drone MP4 videos (GEN_ARGS=...)
+	python3 backend/fault_videos/fault_videos.py generate $(GEN_ARGS)
 
 gen-storm: ## Generate a 10x storm spike of fault JSONs and post-storm drone MP4s
-	python3 backend/fault_videos/fault_videos.py generate --profile storm
+	python3 backend/fault_videos/fault_videos.py generate --profile storm $(GEN_ARGS)
 
 gen-large-video: ## Generate a >1 GB drone inspection MP4 video for scalability testing
 	python3 backend/fault_videos/fault_videos.py generate --faults-per-region 0 --videos-per-region 0 --large-video --large-video-mb 1050
 
-seed-data: .env ## Ingest generated fault JSONs & drone MP4s into running `make dev` storages
-	python3 backend/fault_videos/fault_videos.py ingest
+seed-data: .env ## Upload generated faults & videos through the FileGrid API (needs `make up`; DATA_ARGS="--workers 8")
+	python3 backend/fault_videos/fault_videos.py ingest $(DATA_ARGS)
 
-verify-data: .env ## Verify SHA-256 integrity of stored fault JSONs & drone MP4s in `make dev`
-	python3 backend/fault_videos/fault_videos.py verify
+verify-data: .env ## Download uploaded faults & videos through the API and compare SHA-256
+	python3 backend/fault_videos/fault_videos.py verify $(DATA_ARGS)
 
-data-status: ## Show regional dataset summary and `make dev` storage counts
+data-status: ## Show the local dataset and what FileGrid holds per region
 	python3 backend/fault_videos/fault_videos.py status
 
 sim-build: ## Build the meter simulator image
@@ -93,6 +93,9 @@ seed: .env sim-build ## Generate db/seed/meters.sql from the simulator fleet and
 	  --spring.profiles.active=seed --simulator.seed-file=/out/meters.sql $(SIM_ARGS)
 	$(COMPOSE) exec -T postgres sh -c 'PGPASSWORD="$$FILEGRID_DB_MIGRATOR_PASSWORD" psql -q -v ON_ERROR_STOP=1 -h 127.0.0.1 -U filegrid_migrator -d "$$POSTGRES_DB"' < db/seed/meters.sql
 	@echo "Meters loaded into filegrid.meter."
+
+seed-clients: .env ## Create demo customer logins for seeded meters (CLIENTS=n per region; writes db/seed/clients.csv)
+	./scripts/seed-clients.py $(CLIENTS)
 
 sim: .env sim-build ## Run the meter simulator against FileGrid on localhost:8080 (SIM_ARGS=...)
 	@key=$$(sed -n 's/^FILEGRID_METER_API_KEY=//p' .env); \
