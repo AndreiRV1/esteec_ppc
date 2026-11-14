@@ -15,8 +15,9 @@ spring:
       connection-timeout: 5000
   servlet:
     multipart:
-      max-file-size: 10MB
-      max-request-size: 32MB
+      # Fault recordings are 1-10 MB; the storage policy sets the real limit per category.
+      max-file-size: 64MB
+      max-request-size: 70MB
       # Parts above this are spooled to disk, not held in memory.
       file-size-threshold: 256KB
   mvc:
@@ -26,9 +27,10 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          # Tokens carry the public issuer; keys are fetched over the internal network.
-          issuer-uri: ${FILEGRID_OIDC_ISSUER:http://localhost:8180/realms/filegrid}
-          jwk-set-uri: ${FILEGRID_OIDC_JWKS_URI:http://localhost:8180/realms/filegrid/protocol/openid-connect/certs}
+          # Tokens carry the public issuer (Keycloak behind the proxy); keys are fetched
+          # over plain HTTP from Keycloak directly (`make dev` publishes it on 8180).
+          issuer-uri: ${FILEGRID_OIDC_ISSUER:https://localhost:8443/auth/realms/filegrid}
+          jwk-set-uri: ${FILEGRID_OIDC_JWKS_URI:http://localhost:8180/auth/realms/filegrid/protocol/openid-connect/certs}
           audiences: filegrid-api
 
 server:
@@ -55,11 +57,15 @@ management:
   tracing:
     sampling:
       probability: 1.0
+    export:
+      otlp:
+        # compose turns this on and points it at Tempo.
+        enabled: ${FILEGRID_TRACE_EXPORT:false}
   opentelemetry:
     tracing:
       export:
-        # Turned on once the observability stack (collector/Tempo) is added.
-        enabled: ${FILEGRID_TRACE_EXPORT:false}
+        otlp:
+          endpoint: ${FILEGRID_OTLP_TRACES_ENDPOINT:http://localhost:4318/v1/traces}
   otlp:
     metrics:
       export:
@@ -80,6 +86,11 @@ filegrid:
     # How often pending raw readings are turned into meter_reading rows.
     process-interval: ${FILEGRID_METER_PROCESS_INTERVAL:5s}
     batch-size: 200
+    # false on instances that only ingest; at least one instance must run the processor.
+    processor-enabled: ${FILEGRID_METER_PROCESSOR_ENABLED:true}
+  uploads:
+    # Part size of resumable uploads (drone videos). S3 needs at least 5 MB.
+    part-size: ${FILEGRID_UPLOAD_PART_SIZE:8MB}
   crypto:
     active-key-id: ${FILEGRID_MASTER_KEY_ID:kek-v1}
     master-keys:

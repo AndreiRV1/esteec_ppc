@@ -17,3 +17,5 @@ filegrid:
     api-key: test-meter-key
     # Tests call the processor directly.
     process-interval: 1h
+  uploads:
+    part-size: 5MB

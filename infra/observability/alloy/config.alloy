@@ -1,0 +1,62 @@
+// Ships the stdout/stderr of this compose project's containers to Loki.
+
+discovery.docker "containers" {
+	host = "unix:///var/run/docker.sock"
+
+	filter {
+		name   = "label"
+		values = ["com.docker.compose.project=" + sys.env("COMPOSE_PROJECT_NAME")]
+	}
+}
+
+discovery.relabel "containers" {
+	targets = discovery.docker.containers.targets
+
+	rule {
+		source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+		target_label  = "service"
+	}
+
+	rule {
+		source_labels = ["__meta_docker_container_name"]
+		regex         = "/(.*)"
+		target_label  = "container"
+	}
+}
+
+loki.source.docker "containers" {
+	host       = "unix:///var/run/docker.sock"
+	targets    = discovery.relabel.containers.output
+	forward_to = [loki.process.backend.receiver]
+}
+
+// The backend logs ECS JSON: expose the level as a label and the trace id as
+// structured metadata, so a log line links to its trace in Tempo.
+loki.process "backend" {
+	stage.match {
+		selector = "{service=\"backend\"}"
+
+		stage.json {
+			expressions = {
+				level    = "log.level",
+				trace_id = "traceId",
+			}
+		}
+
+		stage.labels {
+			values = {level = ""}
+		}
+
+		stage.structured_metadata {
+			values = {trace_id = ""}
+		}
+	}
+
+	forward_to = [loki.write.default.receiver]
+}
+
+loki.write "default" {
+	endpoint {
+		url = "http://loki:3100/loki/api/v1/push"
+	}
+}

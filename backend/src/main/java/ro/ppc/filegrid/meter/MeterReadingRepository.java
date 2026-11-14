@@ -71,6 +71,17 @@ public class MeterReadingRepository {
                 .list();
     }
 
+    /** Size of the processing queue and the age of its oldest message, in seconds (0 when empty). */
+    public long[] backlog() {
+        return jdbc.sql("""
+                        SELECT count(*) AS pending,
+                               coalesce(extract(epoch FROM now() - min(received_at)), 0)::bigint AS oldest_seconds
+                        FROM meter_reading_raw WHERE processing_status = 'PENDING'
+                        """)
+                .query((rs, n) -> new long[] {rs.getLong("pending"), rs.getLong("oldest_seconds")})
+                .single();
+    }
+
     public Baseline baseline(String meterId, Instant before) {
         return jdbc.sql("""
                         SELECT (SELECT register_kwh FROM meter_reading

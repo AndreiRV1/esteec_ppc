@@ -12,7 +12,9 @@ import math
 import os
 import random
 import shutil
+import struct
 import subprocess
+import sys
 import tempfile
 import uuid
 from pathlib import Path
@@ -280,6 +282,51 @@ def generate_fault_record_file(
     return meta_entry
 
 
+# Without ffmpeg the generator still produces upload-test payloads: a structurally
+# valid ISO-BMFF (.mp4) container whose media data is pseudo-random bytes. It is
+# not playable, but it has the right size, type and (incompressible) content for
+# transfer, resume and integrity tests.
+_SYNTHETIC_BYTES_PER_SECOND = 1_150_000  # bitrate of the real ffmpeg clips
+_ffmpeg_warning_printed = False
+
+
+def _warn_no_ffmpeg() -> None:
+    global _ffmpeg_warning_printed
+    if not _ffmpeg_warning_printed:
+        _ffmpeg_warning_printed = True
+        print(
+            "WARNING: ffmpeg not found - writing synthetic (non-playable) .mp4 containers. "
+            "Install ffmpeg for real H.264 clips with the HUD overlay.",
+            file=sys.stderr,
+        )
+
+
+def _write_synthetic_mp4(file_path: Path, target_bytes: int, comment: str, rng: random.Random) -> int:
+    """Write `ftyp` + `free` (metadata comment) + one large `mdat` box; O(1) memory. Returns seconds."""
+    ftyp = struct.pack(">I4s4sI4s4s4s4s", 32, b"ftyp", b"isom", 0x200, b"isom", b"iso2", b"avc1", b"mp41")
+    comment_bytes = comment.encode("utf-8")
+    free = struct.pack(">I4s", 8 + len(comment_bytes), b"free") + comment_bytes
+    payload = max(1024, target_bytes - len(ftyp) - len(free) - 16)
+    block_size = 1024 * 1024
+    block = rng.getrandbits(8 * block_size).to_bytes(block_size, "little")
+    body = memoryview(block)[8:]
+    with file_path.open("wb") as f:
+        f.write(ftyp)
+        f.write(free)
+        f.write(struct.pack(">I4sQ", 1, b"mdat", 16 + payload))  # size 1 = 64-bit largesize follows
+        written = 0
+        counter = 0
+        while written < payload:
+            # A counter in front of every block keeps blocks distinct (no dedup/compression shortcut).
+            chunk = struct.pack(">Q", counter) + bytes(body[: max(0, min(block_size, payload - written) - 8)])
+            chunk = chunk[: payload - written]
+            f.write(chunk)
+            written += len(chunk)
+            counter += 1
+    return max(4, round(payload / _SYNTHETIC_BYTES_PER_SECOND))
+
+
+
 def generate_drone_video_file(
     output_dir: Path,
     region: str,
@@ -295,11 +342,11 @@ def generate_drone_video_file(
     and companion `.meta.json` in `output_dir/videos/<REGION>/`.
     Uses a base encoded segment + `-stream_loop` stream copy so even 1 GB+ videos
     are produced in a few seconds with constant CPU/memory usage.
+    Without ffmpeg a synthetic (non-playable) container of the same size is written.
     """
     if region not in REGIONS:
         raise ValueError(f"Unsupported region: {region}")
-    if shutil.which("ffmpeg") is None:
-        raise RuntimeError("ffmpeg is required to generate .mp4 drone inspection videos.")
+    have_ffmpeg = shutil.which("ffmpeg") is not None
 
     now_utc = dt.datetime.now(dt.timezone.utc)
     if flight_started_at is None:
@@ -325,83 +372,87 @@ def generate_drone_video_file(
         f"[{region} / jud. {power_line.county}]."
     )
 
-    # Encode a 4-second high-detail base clip (~4-6 MB), then stream-loop with -c copy
-    # to reach the requested target_size_mb cleanly and rapidly.
-    base_seconds = 4
-    with tempfile.TemporaryDirectory(prefix="filegrid_video_") as tmpdir:
-        seg_path = Path(tmpdir) / "segment.mp4"
+    metadata_comment = (
+        f"region={region};category=DRONE_VIDEO;county={power_line.county};"
+        f"line_code={power_line.code};drone_id={drone.drone_id}"
+    )
+    target_bytes = int(max(1.0, target_size_mb) * 1024 * 1024)
+    if not have_ffmpeg:
+        _warn_no_ffmpeg()
+        duration_seconds = _write_synthetic_mp4(file_path, target_bytes, metadata_comment, rng)
+    else:
+        # Encode a 4-second high-detail base clip (~4-6 MB), then stream-loop with -c copy
+        # to reach the requested target_size_mb cleanly and rapidly.
+        base_seconds = 4
+        with tempfile.TemporaryDirectory(prefix="filegrid_video_") as tmpdir:
+            seg_path = Path(tmpdir) / "segment.mp4"
 
-        line1 = f"RETELE ELECTRICE ROMANIA  |  REGION\\: {region}  |  JUDET\\: {power_line.county}"
-        line2 = f"LINE\\: {power_line.code} ({power_line.voltage_kv} kV)  |  DRONE\\: {drone.drone_id}"
-        line3 = (
-            f"GPS\\: {power_line.start_lat:.4f}N {power_line.start_lon:.4f}E  |  "
-            f"FLIGHT\\: {flight_started_at.strftime('%Y-%m-%d %H\\:%M UTC')}  |  T\\: %{{pts\\:hms}}"
-        )
+            line1 = f"RETELE ELECTRICE ROMANIA  |  REGION\\: {region}  |  JUDET\\: {power_line.county}"
+            line2 = f"LINE\\: {power_line.code} ({power_line.voltage_kv} kV)  |  DRONE\\: {drone.drone_id}"
+            line3 = (
+                f"GPS\\: {power_line.start_lat:.4f}N {power_line.start_lon:.4f}E  |  "
+                f"FLIGHT\\: {flight_started_at.strftime('%Y-%m-%d %H\\:%M UTC')}  |  T\\: %{{pts\\:hms}}"
+            )
 
-        # Adding light sensor noise ensures realistic bitrate (~1–1.2 MB/s -> ~4.5 MB per 4s segment)
-        vf_filter = (
-            "noise=alls=6:allf=t,"
-            "drawbox=x=0:y=0:w=iw:h=115:color=black@0.72:t=fill,"
-            f"drawtext=text='{line1}':x=24:y=18:fontsize=22:fontcolor=white,"
-            f"drawtext=text='{line2}':x=24:y=50:fontsize=19:fontcolor=cyan,"
-            f"drawtext=text='{line3}':x=24:y=80:fontsize=17:fontcolor=yellow"
-        )
+            # Adding light sensor noise ensures realistic bitrate (~1–1.2 MB/s -> ~4.5 MB per 4s segment)
+            vf_filter = (
+                "noise=alls=6:allf=t,"
+                "drawbox=x=0:y=0:w=iw:h=115:color=black@0.72:t=fill,"
+                f"drawtext=text='{line1}':x=24:y=18:fontsize=22:fontcolor=white,"
+                f"drawtext=text='{line2}':x=24:y=50:fontsize=19:fontcolor=cyan,"
+                f"drawtext=text='{line3}':x=24:y=80:fontsize=17:fontcolor=yellow"
+            )
 
-        cmd_base = [
-            "ffmpeg",
-            "-y",
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-f",
-            "lavfi",
-            "-i",
-            f"testsrc2=size=1280x720:rate=25:duration={base_seconds}",
-            "-vf",
-            vf_filter,
-            "-c:v",
-            "libx264",
-            "-preset",
-            "ultrafast",
-            "-crf",
-            "21",
-            "-pix_fmt",
-            "yuv420p",
-            str(seg_path),
-        ]
-        subprocess.run(cmd_base, check=True)
+            cmd_base = [
+                "ffmpeg",
+                "-y",
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                f"testsrc2=size=1280x720:rate=25:duration={base_seconds}",
+                "-vf",
+                vf_filter,
+                "-c:v",
+                "libx264",
+                "-preset",
+                "ultrafast",
+                "-crf",
+                "21",
+                "-pix_fmt",
+                "yuv420p",
+                str(seg_path),
+            ]
+            subprocess.run(cmd_base, check=True)
 
-        seg_size = seg_path.stat().st_size
-        target_bytes = int(max(1.0, target_size_mb) * 1024 * 1024)
-        loops = max(0, math.ceil(target_bytes / max(1, seg_size)) - 1)
-        duration_seconds = base_seconds * (loops + 1)
+            seg_size = seg_path.stat().st_size
+            target_bytes = int(max(1.0, target_size_mb) * 1024 * 1024)
+            loops = max(0, math.ceil(target_bytes / max(1, seg_size)) - 1)
+            duration_seconds = base_seconds * (loops + 1)
 
-        metadata_comment = (
-            f"region={region};category=DRONE_VIDEO;county={power_line.county};"
-            f"line_code={power_line.code};drone_id={drone.drone_id}"
-        )
-
-        cmd_loop = [
-            "ffmpeg",
-            "-y",
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-stream_loop",
-            str(loops),
-            "-i",
-            str(seg_path),
-            "-c",
-            "copy",
-            "-metadata",
-            f"title=FileGrid Drone Inspection {region} - {power_line.code}",
-            "-metadata",
-            f"comment={metadata_comment}",
-            "-movflags",
-            "+faststart",
-            str(file_path),
-        ]
-        subprocess.run(cmd_loop, check=True)
+            cmd_loop = [
+                "ffmpeg",
+                "-y",
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-stream_loop",
+                str(loops),
+                "-i",
+                str(seg_path),
+                "-c",
+                "copy",
+                "-metadata",
+                f"title=FileGrid Drone Inspection {region} - {power_line.code}",
+                "-metadata",
+                f"comment={metadata_comment}",
+                "-movflags",
+                "+faststart",
+                str(file_path),
+            ]
+            subprocess.run(cmd_loop, check=True)
 
     digest, size_bytes = sha256_file(file_path)
 
@@ -433,6 +484,7 @@ def generate_drone_video_file(
             "size_mb": round(size_bytes / (1024 * 1024), 2),
             "sha256": digest,
             "uploaded_by": uploaded_by,
+            "encoder": "ffmpeg" if have_ffmpeg else "synthetic",
         },
         "drone_video": drone_record,
     }

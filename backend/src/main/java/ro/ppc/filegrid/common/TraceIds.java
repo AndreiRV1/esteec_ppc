@@ -2,6 +2,8 @@ package ro.ppc.filegrid.common;
 
 import io.micrometer.tracing.Span;
 import io.micrometer.tracing.Tracer;
+import java.util.Map;
+import java.util.function.Supplier;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
@@ -22,5 +24,24 @@ public class TraceIds {
         }
         Span span = t.currentSpan();
         return span == null ? null : span.context().traceId();
+    }
+
+    /** Runs {@code action} in a child span, so a request can be followed down to the storage call. */
+    public <T> T inSpan(String name, Map<String, String> tags, Supplier<T> action) {
+        Tracer t = tracer.getIfAvailable();
+        if (t == null) {
+            return action.get();
+        }
+        Span span = t.nextSpan().name(name);
+        tags.forEach(span::tag);
+        span.start();
+        try (Tracer.SpanInScope ignored = t.withSpan(span)) {
+            return action.get();
+        } catch (RuntimeException e) {
+            span.error(e);
+            throw e;
+        } finally {
+            span.end();
+        }
     }
 }

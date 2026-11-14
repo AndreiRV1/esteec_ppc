@@ -11,8 +11,10 @@ import org.springframework.validation.annotation.Validated;
  * @param apiKey          shared key the meters send in {@code X-API-Key}
  * @param processInterval pause between two runs of the raw-reading processor
  * @param batchSize       raw messages processed per transaction
+ * @param processorEnabled false on instances that only ingest (the processor then runs elsewhere)
  */
 @Validated
 @ConfigurationProperties("filegrid.meters")
-public record MeterProperties(@NotBlank String apiKey, @NotNull Duration processInterval, @Min(1) int batchSize) {
+public record MeterProperties(@NotBlank String apiKey, @NotNull Duration processInterval, @Min(1) int batchSize,
+                              boolean processorEnabled) {
 }

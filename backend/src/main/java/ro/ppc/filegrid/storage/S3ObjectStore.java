@@ -2,11 +2,14 @@ package ro.ppc.filegrid.storage;
 
 import java.io.InputStream;
 import java.nio.file.Path;
+import java.util.List;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.CompletedPart;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
+import software.amazon.awssdk.services.s3.model.NoSuchUploadException;
 
 /** S3 / MinIO. Location format: {@code <bucket>/<key>}. */
 @Component
@@ -52,6 +55,60 @@ public class S3ObjectStore implements ObjectStore {
         Location loc = Location.parse(address.location());
         try {
             s3.deleteObject(b -> b.bucket(loc.bucket()).key(loc.key()));
+        } catch (SdkException e) {
+            throw new StorageUnavailableException(type(), "delete", e);
+        }
+    }
+
+    @Override
+    public String beginParts(Address address) {
+        Location loc = Location.parse(address.location());
+        try {
+            return s3.createMultipartUpload(b -> b.bucket(loc.bucket()).key(loc.key())).uploadId();
+        } catch (SdkException e) {
+            throw new StorageUnavailableException(type(), "put", e);
+        }
+    }
+
+    @Override
+    public void putPart(Address address, String uploadId, int partNumber, long offset, Path source, long size) {
+        Location loc = Location.parse(address.location());
+        try {
+            s3.uploadPart(b -> b.bucket(loc.bucket()).key(loc.key()).uploadId(uploadId).partNumber(partNumber)
+                    .contentLength(size), RequestBody.fromFile(source));
+        } catch (SdkException e) {
+            throw new StorageUnavailableException(type(), "put", e);
+        }
+    }
+
+    @Override
+    public void completeParts(Address address, String uploadId) {
+        Location loc = Location.parse(address.location());
+        try {
+            List<CompletedPart> parts = s3.listPartsPaginator(
+                            b -> b.bucket(loc.bucket()).key(loc.key()).uploadId(uploadId))
+                    .parts().stream()
+                    .map(p -> CompletedPart.builder().partNumber(p.partNumber()).eTag(p.eTag()).build())
+                    .toList();
+            s3.completeMultipartUpload(b -> b.bucket(loc.bucket()).key(loc.key()).uploadId(uploadId)
+                    .multipartUpload(m -> m.parts(parts)));
+        } catch (NoSuchUploadException e) {
+            // Already completed by an earlier attempt: fine as long as the object is there.
+            try {
+                s3.headObject(b -> b.bucket(loc.bucket()).key(loc.key()));
+            } catch (SdkException missing) {
+                throw new StorageUnavailableException(type(), "put", e);
+            }
+        } catch (SdkException e) {
+            throw new StorageUnavailableException(type(), "put", e);
+        }
+    }
+
+    @Override
+    public void abortParts(Address address, String uploadId) {
+        Location loc = Location.parse(address.location());
+        try {
+            s3.abortMultipartUpload(b -> b.bucket(loc.bucket()).key(loc.key()).uploadId(uploadId));
         } catch (SdkException e) {
             throw new StorageUnavailableException(type(), "delete", e);
         }

@@ -1,0 +1,147 @@
+# One group per business requirement of the spec (table 2.1), plus the platform
+# itself. `category` and `backend` labels match the dashboards.
+groups:
+  # "Nicio citire nu se pierde și nu se dublează"
+  - name: meter-readings
+    rules:
+      - alert: MeterReadingsNotProcessed
+        expr: max(filegrid_meter_raw_oldest_pending_seconds) > 300
+        for: 2m
+        labels: { severity: critical, category: METER_READING }
+        annotations:
+          summary: Meter readings are waiting more than 5 minutes to be processed
+          description: >-
+            The oldest pending raw reading is {{ $value | humanizeDuration }} old. Readings are
+            stored (nothing is lost) but billing data is falling behind. Check the processor.
+      - alert: MeterBacklogGrowing
+        expr: max(filegrid_meter_raw_pending) > 5000 and max(deriv(filegrid_meter_raw_pending[10m])) > 0
+        for: 5m
+        labels: { severity: warning, category: METER_READING }
+        annotations:
+          summary: Backlog of raw meter readings keeps growing ({{ $value | humanize }} pending)
+          description: Ingest is faster than processing. Add backend replicas or raise the batch size.
+      - alert: MeterIngestFailing
+        expr: |
+          sum(rate(http_server_requests_seconds_count{category="METER_READING",status=~"5.."}[5m]))
+            / sum(rate(http_server_requests_seconds_count{category="METER_READING"}[5m])) > 0.01
+        for: 2m
+        labels: { severity: critical, category: METER_READING }
+        annotations:
+          summary: "{{ $value | humanizePercentage }} of meter readings are answered with 5xx"
+          description: Meters retry with the same readingId, so nothing is lost yet, but their buffers are filling.
+      - alert: MeterReadingsRejected
+        expr: |
+          sum(rate(filegrid_meter_raw_total{status="rejected"}[10m]))
+            / sum(rate(filegrid_meter_raw_total[10m])) > 0.05
+        for: 10m
+        labels: { severity: warning, category: METER_READING }
+        annotations:
+          summary: "{{ $value | humanizePercentage }} of meter messages are rejected by the processor"
+          description: Rejected messages stay in meter_reading_raw with the reason; many at once point to a firmware or clock problem.
+      - alert: MeterIngestSilent
+        expr: sum(rate(http_server_requests_seconds_count{category="METER_READING"}[10m])) == 0
+        for: 15m
+        labels: { severity: warning, category: METER_READING }
+        annotations:
+          summary: No meter reading received for 15 minutes
+          description: Meters send continuously; silence means they cannot reach FileGrid.
+
+  # "Disponibile imediat pentru dispecerat"
+  - name: fault-records
+    rules:
+      - alert: FaultRecordsSlow
+        expr: |
+          histogram_quantile(0.95, sum by (le) (rate(http_server_requests_seconds_bucket{category="FAULT_RECORD"}[5m]))) > 5
+        for: 5m
+        labels: { severity: warning, category: FAULT_RECORD }
+        annotations:
+          summary: Fault record requests take {{ $value | humanizeDuration }} at p95
+          description: Dispatch needs fault records right after upload. Check the storage latency dashboard.
+      - alert: FaultRecordsFailing
+        expr: |
+          sum(rate(http_server_requests_seconds_count{category="FAULT_RECORD",status=~"5.."}[5m]))
+            / sum(rate(http_server_requests_seconds_count{category="FAULT_RECORD"}[5m])) > 0.05
+        for: 2m
+        labels: { severity: critical, category: FAULT_RECORD }
+        annotations:
+          summary: "{{ $value | humanizePercentage }} of fault record requests fail"
+          description: Uploads or downloads of fault records are failing; dispatch may not see new faults.
+
+  # "Datele personale rămân protejate și verificabile la audit"
+  - name: connection-documents
+    rules:
+      - alert: ConnectionDocumentsFailing
+        expr: |
+          sum(rate(http_server_requests_seconds_count{category="CONNECTION_DOCUMENTS",status=~"5.."}[5m]))
+            / sum(rate(http_server_requests_seconds_count{category="CONNECTION_DOCUMENTS"}[5m])) > 0.05
+        for: 5m
+        labels: { severity: warning, category: CONNECTION_DOCUMENTS }
+        annotations:
+          summary: "{{ $value | humanizePercentage }} of connection request calls fail"
+          description: Applicants or reviewers cannot work with connection documents.
+
+  # "Transferul rezistă pe conexiuni lente sau instabile"
+  - name: drone-videos
+    rules:
+      - alert: DroneVideoUploadsFailing
+        expr: |
+          sum(rate(http_server_requests_seconds_count{category="DRONE_VIDEO",status=~"5.."}[10m]))
+            / sum(rate(http_server_requests_seconds_count{category="DRONE_VIDEO"}[10m])) > 0.10
+        for: 5m
+        labels: { severity: warning, category: DRONE_VIDEO }
+        annotations:
+          summary: "{{ $value | humanizePercentage }} of drone video requests fail"
+          description: Clients resume automatically, but uploads will not complete until this stops.
+
+  # Every category: integrity and the storages behind them
+  - name: storage
+    rules:
+      - alert: FileIntegrityFailure
+        expr: sum by (category, backend) (increase(filegrid_storage_integrity_failures_total[15m])) > 0
+        labels: { severity: critical }
+        annotations:
+          summary: A {{ $labels.category }} file on {{ $labels.backend }} failed its checksum
+          description: The file was not returned and is marked CORRUPTED in stored_file. Restore it from the previous object version or backup.
+      - alert: StorageBackendDown
+        expr: probe_success{job="storage"} == 0
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: Storage {{ $labels.backend }} is not reachable
+          description: >-
+            {{ $labels.instance }} does not answer. Categories whose policy uses {{ $labels.backend }}
+            fail; the others keep working. Files already confirmed are safe on the volume.
+      - alert: StorageOperationsFailing
+        expr: |
+          sum by (category, backend) (rate(filegrid_storage_operation_seconds_count{outcome="error"}[5m]))
+            / sum by (category, backend) (rate(filegrid_storage_operation_seconds_count[5m])) > 0.05
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: "{{ $value | humanizePercentage }} of {{ $labels.category }} operations on {{ $labels.backend }} fail"
+          description: The backend answers but writes or reads are failing (credentials, disk full, quota).
+      - alert: StorageOperationsSlow
+        expr: |
+          histogram_quantile(0.95, sum by (le, category, backend) (rate(filegrid_storage_operation_seconds_bucket[5m]))) > 10
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $labels.category }} on {{ $labels.backend }}: p95 is {{ $value | humanizeDuration }}"
+          description: Storage calls are slow; uploads may time out on weak links.
+
+  - name: platform
+    rules:
+      - alert: BackendDown
+        expr: (count(up{job="backend"} == 1) or vector(0)) == 0
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: No FileGrid backend instance is up
+          description: Nothing can be uploaded or read. Meters buffer their readings and retry.
+      - alert: BackendInstanceDown
+        expr: up{job="backend"} == 0
+        for: 2m
+        labels: { severity: warning }
+        annotations:
+          summary: Backend instance {{ $labels.instance }} is down
+          description: The remaining instances carry the load.

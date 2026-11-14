@@ -4,7 +4,7 @@
   "enabled": true,
   "sslRequired": "external",
   "registrationAllowed": true,
-  "registrationEmailAsUsername": true,
+  "registrationEmailAsUsername": false,
   "loginWithEmailAllowed": true,
   "duplicateEmailsAllowed": false,
   "resetPasswordAllowed": false,
@@ -29,6 +29,10 @@
         "description": "Reviews connection requests and reads their documents"
       },
       {
+        "name": "employee",
+        "description": "Field/office staff: uploads fault records, drone videos and connection requests on behalf of applicants"
+      },
+      {
         "name": "default-roles-filegrid",
         "description": "Granted to every self-registered user",
         "composite": true,
@@ -51,11 +55,11 @@
       "implicitFlowEnabled": false,
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
-      "redirectUris": ["http://localhost:4200/*"],
-      "webOrigins": ["http://localhost:4200"],
+      "redirectUris": ["${FILEGRID_PUBLIC_URL}/*", "http://localhost:4200/*"],
+      "webOrigins": ["${FILEGRID_PUBLIC_URL}", "http://localhost:4200"],
       "attributes": {
         "pkce.code.challenge.method": "S256",
-        "post.logout.redirect.uris": "http://localhost:4200/*"
+        "post.logout.redirect.uris": "${FILEGRID_PUBLIC_URL}/*##http://localhost:4200/*"
       },
       "protocolMappers": [
         {
@@ -68,6 +72,39 @@
             "access.token.claim": "true",
             "id.token.claim": "false",
             "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "filegrid-grafana",
+      "name": "Grafana (monitoring, realm role admin only)",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "${GRAFANA_OAUTH_CLIENT_SECRET}",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["${FILEGRID_PUBLIC_URL}/grafana/login/generic_oauth"],
+      "webOrigins": ["${FILEGRID_PUBLIC_URL}"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "${FILEGRID_PUBLIC_URL}/*"
+      },
+      "protocolMappers": [
+        {
+          "name": "realm-roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "roles",
+            "jsonType.label": "String",
+            "multivalued": "true",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
           }
         }
       ]
@@ -129,6 +166,22 @@
         }
       ],
       "realmRoles": ["default-roles-filegrid"]
+    },
+    {
+      "username": "employee.demo@filegrid.local",
+      "email": "employee.demo@filegrid.local",
+      "emailVerified": true,
+      "firstName": "Employee",
+      "lastName": "Demo",
+      "enabled": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${FILEGRID_DEMO_EMPLOYEE_PASSWORD}",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["employee"]
     }
   ]
 }

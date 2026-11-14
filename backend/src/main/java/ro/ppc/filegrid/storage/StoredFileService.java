@@ -218,7 +218,7 @@ public class StoredFileService {
         }
     }
 
-    private ApiException corrupted(StoredFile file, String reason) {
+    ApiException corrupted(StoredFile file, String reason) {
         log.error("Integrity check failed for file {} ({} on {}): {}",
                 file.id(), file.category(), file.backend(), reason);
         bestEffort(() -> files.markStatus(file.id(), StoredFile.Status.CORRUPTED), "mark CORRUPTED");
@@ -235,7 +235,7 @@ public class StoredFileService {
                 "File " + file.id() + " failed its integrity check (" + reason + ") and was not returned");
     }
 
-    private ObjectStore storeFor(StorageBackendType type) {
+    ObjectStore storeFor(StorageBackendType type) {
         ObjectStore store = stores.get(type);
         if (store == null) {
             throw new IllegalStateException("No object store for backend " + type);
@@ -243,12 +243,14 @@ public class StoredFileService {
         return store;
     }
 
-    private <T> T timed(FileCategory category, StorageBackendType backend, String operation,
-                        java.util.function.Supplier<T> action) {
+    /** Times one backend call (per category and backend) and wraps it in a trace span. */
+    <T> T timed(FileCategory category, StorageBackendType backend, String operation,
+                java.util.function.Supplier<T> action) {
         Timer.Sample sample = Timer.start(meters);
         String outcome = "success";
         try {
-            return action.get();
+            return traceIds.inSpan("storage " + operation,
+                    Map.of("filegrid.category", category.name(), "filegrid.backend", backend.name()), action);
         } catch (RuntimeException e) {
             outcome = "error";
             throw e;
@@ -264,14 +266,14 @@ public class StoredFileService {
         }
     }
 
-    private void timedRun(FileCategory category, StorageBackendType backend, String operation, Runnable action) {
+    void timedRun(FileCategory category, StorageBackendType backend, String operation, Runnable action) {
         timed(category, backend, operation, () -> {
             action.run();
             return null;
         });
     }
 
-    private static void bestEffort(Runnable action, String what) {
+    static void bestEffort(Runnable action, String what) {
         try {
             action.run();
         } catch (RuntimeException e) {

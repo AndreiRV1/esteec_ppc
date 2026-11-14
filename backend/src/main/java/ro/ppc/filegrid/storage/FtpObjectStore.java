@@ -58,6 +58,65 @@ public class FtpObjectStore implements ObjectStore {
     }
 
     @Override
+    public String beginParts(Address address) {
+        FTPClient ftp = connect("put");
+        try {
+            makeParentDirectories(ftp, address.location());
+            quietly(() -> ftp.deleteFile(address.location() + ".part"));
+            return null;
+        } catch (IOException e) {
+            throw new StorageUnavailableException(type(), "put", e);
+        } finally {
+            disconnect(ftp);
+        }
+    }
+
+    @Override
+    public void putPart(Address address, String uploadId, int partNumber, long offset, Path source, long size) {
+        FTPClient ftp = connect("put");
+        try (InputStream in = Files.newInputStream(source)) {
+            // REST + STOR writes at the offset, so a part that was cut off mid-way is simply written again.
+            ftp.setRestartOffset(offset);
+            if (!ftp.storeFile(address.location() + ".part", in)) {
+                throw new IOException("STOR failed: " + ftp.getReplyString());
+            }
+        } catch (IOException e) {
+            throw new StorageUnavailableException(type(), "put", e);
+        } finally {
+            disconnect(ftp);
+        }
+    }
+
+    @Override
+    public void completeParts(Address address, String uploadId) {
+        String path = address.location();
+        FTPClient ftp = connect("put");
+        try {
+            if (!ftp.rename(path + ".part", path)) {
+                String reply = ftp.getReplyString();
+                // Already renamed by an earlier attempt?
+                if (ftp.listFiles(path).length != 1) {
+                    throw new IOException("RNTO failed: " + reply);
+                }
+            }
+        } catch (IOException e) {
+            throw new StorageUnavailableException(type(), "put", e);
+        } finally {
+            disconnect(ftp);
+        }
+    }
+
+    @Override
+    public void abortParts(Address address, String uploadId) {
+        FTPClient ftp = connect("delete");
+        try {
+            quietly(() -> ftp.deleteFile(address.location() + ".part"));
+        } finally {
+            disconnect(ftp);
+        }
+    }
+
+    @Override
     public InputStream open(Address address) {
         FTPClient ftp = connect("get");
         try {
