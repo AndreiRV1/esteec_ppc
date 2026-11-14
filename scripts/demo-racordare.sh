@@ -24,7 +24,8 @@ trap 'rm -rf "$WORK"' EXIT
 # The proxy's certificate is signed by its own local CA: fetch that CA and verify
 # against it. A certificate from a public CA needs no extra option.
 TLS_OPT=""
-if docker compose cp proxy:/data/caddy/pki/authorities/local/root.crt "$WORK/ca.crt" >/dev/null 2>&1; then
+COMPOSE="docker compose${FILEGRID_ENV_FILE:+ --env-file $FILEGRID_ENV_FILE}"
+if $COMPOSE cp proxy:/data/caddy/pki/authorities/local/root.crt "$WORK/ca.crt" >/dev/null 2>&1; then
   TLS_OPT="--cacert $WORK/ca.crt"
 fi
 curl() { command curl $TLS_OPT "$@"; }

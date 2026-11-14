@@ -58,12 +58,12 @@ class MeterReadingFlowTest {
         // Third message: timestamps a day ahead of the server clock.
         send(reading(METER, value(24 * 4, "0.400", "102.000", "230.0")), "test-meter-key", status().isAccepted());
 
-        assertThat(count("meter_reading_raw WHERE processing_status = 'PENDING'")).isEqualTo(3);
-        assertThat(processor.processBatch()).isEqualTo(3);
+        assertThat(count("meter_reading_raw WHERE meter_id = '" + METER + "' AND processing_status = 'PENDING'")).isEqualTo(3);
+        assertThat(processor.processBatch()).isGreaterThanOrEqualTo(3);
         assertThat(processor.processBatch()).isZero();
 
-        assertThat(count("meter_reading_raw WHERE processing_status = 'PROCESSED'")).isEqualTo(2);
-        assertThat(count("meter_reading_raw WHERE processing_status = 'REJECTED' AND processing_error LIKE '%future%'"))
+        assertThat(count("meter_reading_raw WHERE meter_id = '" + METER + "' AND processing_status = 'PROCESSED'")).isEqualTo(2);
+        assertThat(count("meter_reading_raw WHERE meter_id = '" + METER + "' AND processing_status = 'REJECTED' AND processing_error LIKE '%future%'"))
                 .isEqualTo(1);
         assertThat(jdbc.queryForList("SELECT coalesce(anomaly_reason, quality) FROM meter_reading WHERE meter_id = ? "
                 + "ORDER BY interval_start", String.class, METER))

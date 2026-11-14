@@ -19,26 +19,27 @@ value_for() {
 }
 
 umask 077
-tmp=$(mktemp .env.XXXXXX)
+ENV_FILE="${FILEGRID_ENV_FILE:-.env}"
+tmp=$(mktemp "${ENV_FILE}.XXXXXX")
 trap 'rm -f "$tmp"' EXIT
 
-if [ -e .env ]; then
-  cp .env "$tmp"
+if [ -e "$ENV_FILE" ]; then
+  cp "$ENV_FILE" "$tmp"
   added=0
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in
       ''|'#'*) continue ;;
     esac
     key=${line%%=*}
-    if ! grep -q "^${key}=" .env; then
+    if ! grep -q "^${key}=" "$ENV_FILE"; then
       printf '%s=%s\n' "$key" "$(value_for "${line#*=}")" >> "$tmp"
       echo "added $key"
       added=$((added + 1))
     fi
   done < .env.example
-  mv "$tmp" .env
+  mv "$tmp" "$ENV_FILE"
   trap - EXIT
-  echo ".env is up to date ($added new variable(s))."
+  echo "$ENV_FILE is up to date ($added new variable(s))."
   exit 0
 fi
 
@@ -49,6 +50,6 @@ while IFS= read -r line || [ -n "$line" ]; do
   esac
 done < .env.example > "$tmp"
 
-mv "$tmp" .env
+mv "$tmp" "$ENV_FILE"
 trap - EXIT
-echo "Wrote .env with freshly generated secrets (mode 600)."
+echo "Wrote $ENV_FILE with freshly generated secrets (mode 600)."

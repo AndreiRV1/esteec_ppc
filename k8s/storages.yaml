@@ -1,0 +1,541 @@
+# Storage layer: PostgreSQL 18, MinIO (S3) and vsftpd (FTP), plus the two
+# idempotent init Jobs (db-migrate and minio-init).
+#
+# vsftpd passive mode inside Kubernetes:
+#   - Service `ftp` has a stable ClusterIP and exposes control port 21 plus the
+#     fixed passive range 21100-21119.
+#   - Kubernetes injects $(FTP_SERVICE_HOST) (the Service's ClusterIP) into the
+#     ftp pod; setting FTP_PASV_ADDRESS="$(FTP_SERVICE_HOST)" makes vsftpd
+#     advertise that fixed ClusterIP in PASV replies so passive data connections
+#     always match the control connection address and survive pod restarts.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: filegrid
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/part-of: filegrid
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: postgres
+        app.kubernetes.io/part-of: filegrid
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:18-alpine@sha256:1018733457011bf88d81db98cf43aac6d5150afc18787dbe204771fedf80ff95
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: "filegrid"
+            - name: POSTGRES_USER
+              value: "postgres"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: filegrid-secrets
+                  key: POSTGRES_SUPERUSER_PASSWORD
+            - name: FILEGRID_DB_MIGRATOR_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: filegrid-secrets
+                  key: FILEGRID_DB_MIGRATOR_PASSWORD
+            - name: FILEGRID_DB_APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: filegrid-secrets
+                  key: FILEGRID_DB_APP_PASSWORD
+            - name: KEYCLOAK_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: filegrid-secrets
+                  key: KEYCLOAK_DB_PASSWORD
+          volumeMounts:
+            - name: pg-data
+              mountPath: /var/lib/postgresql
+            - name: initdb
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -h 127.0.0.1 -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -h 127.0.0.1 -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
+            initialDelaySeconds: 15
+            periodSeconds: 10
+      volumes:
+        - name: initdb
+          configMap:
+            name: postgres-initdb
+            defaultMode: 0555
+  volumeClaimTemplates:
+    - metadata:
+        name: pg-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: filegrid
+spec:
+  selector:
+    app.kubernetes.io/name: postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: postgres
+  namespace: filegrid
+spec:
+  maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgres
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-migrate
+  namespace: filegrid
+  labels:
+    app.kubernetes.io/name: db-migrate
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/part-of: filegrid
+spec:
+  backoffLimit: 6
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: db-migrate
+        app.kubernetes.io/component: backend
+        app.kubernetes.io/part-of: filegrid
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: flyway
+          image: flyway/flyway:11-alpine@sha256:df06535dfd6559ae5f0628c4761013dfa4ea6a30cf6e34294931d8091f55a18f
+          args: ["migrate"]
+          env:
+            - name: FLYWAY_URL
+              value: "jdbc:postgresql://postgres:5432/filegrid"
+            - name: FLYWAY_USER
+              value: "filegrid_migrator"
+            - name: FLYWAY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: filegrid-secrets
+                  key: FILEGRID_DB_MIGRATOR_PASSWORD
+            - name: FLYWAY_SCHEMAS
+              value: "filegrid"
+            - name: FLYWAY_CREATE_SCHEMAS
+              value: "false"
+            - name: FLYWAY_LOCATIONS
+              value: "filesystem:/flyway/sql"
+            - name: FLYWAY_CONNECT_RETRIES
+              value: "30"
+            - name: FLYWAY_VALIDATE_MIGRATION_NAMING
+              value: "true"
+            - name: REDGATE_DISABLE_TELEMETRY
+              value: "true"
+          volumeMounts:
+            - name: migrations
+              mountPath: /flyway/sql
+              readOnly: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: migrations
+          configMap:
+            name: db-migrations
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: minio
+  namespace: filegrid
+  labels:
+    app.kubernetes.io/name: minio
+    app.kubernetes.io/part-of: filegrid
+spec:
+  serviceName: minio
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: minio
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: minio
+        app.kubernetes.io/part-of: filegrid
+    spec:
+      containers:
+        - name: minio
+          image: cgr.dev/chainguard/minio@sha256:0f9fda72fbc6bd3560ea903aec2ceefa20f6ba82628d67656f37fb370c39ae9c
+          args: ["server", "/data", "--console-address", ":9001"]
+          ports:
+            - name: s3
+              containerPort: 9000
+            - name: console
+              containerPort: 9001
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: filegrid-secrets
+                  key: MINIO_ROOT_USER
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: filegrid-secrets
+                  key: MINIO_ROOT_PASSWORD
+          volumeMounts:
+            - name: minio-data
+              mountPath: /data
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          readinessProbe:
+            httpGet:
+              path: /minio/health/ready
+              port: 9000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /minio/health/live
+              port: 9000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+  volumeClaimTemplates:
+    - metadata:
+        name: minio-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 10Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+  namespace: filegrid
+spec:
+  selector:
+    app.kubernetes.io/name: minio
+  ports:
+    - name: s3
+      port: 9000
+      targetPort: 9000
+    - name: console
+      port: 9001
+      targetPort: 9001
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: minio
+  namespace: filegrid
+spec:
+  maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: minio
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: minio-init
+  namespace: filegrid
+  labels:
+    app.kubernetes.io/name: minio-init
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/part-of: filegrid
+spec:
+  backoffLimit: 6
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: minio-init
+        app.kubernetes.io/component: backend
+        app.kubernetes.io/part-of: filegrid
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: minio-init
+          image: cgr.dev/chainguard/minio-client:latest-dev@sha256:e1f3f37e8b13f34be49494f441ca01ff7be4e05d7cf04bf26681b0fe380852e1
+          command: ["/bin/sh", "/init/init.sh"]
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: filegrid-secrets
+                  key: MINIO_ROOT_USER
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: filegrid-secrets
+                  key: MINIO_ROOT_PASSWORD
+            - name: FILEGRID_S3_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: filegrid-secrets
+                  key: FILEGRID_S3_ACCESS_KEY
+            - name: FILEGRID_S3_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: filegrid-secrets
+                  key: FILEGRID_S3_SECRET_KEY
+          volumeMounts:
+            - name: minio-init
+              mountPath: /init
+              readOnly: true
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+      volumes:
+        - name: minio-init
+          configMap:
+            name: minio-init
+            defaultMode: 0555
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: ftp
+  namespace: filegrid
+  labels:
+    app.kubernetes.io/name: ftp
+    app.kubernetes.io/part-of: filegrid
+spec:
+  serviceName: ftp
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ftp
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ftp
+        app.kubernetes.io/part-of: filegrid
+    spec:
+      containers:
+        - name: vsftpd
+          image: filegrid/vsftpd:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: control
+              containerPort: 21
+            - name: pasv-00
+              containerPort: 21100
+            - name: pasv-01
+              containerPort: 21101
+            - name: pasv-02
+              containerPort: 21102
+            - name: pasv-03
+              containerPort: 21103
+            - name: pasv-04
+              containerPort: 21104
+            - name: pasv-05
+              containerPort: 21105
+            - name: pasv-06
+              containerPort: 21106
+            - name: pasv-07
+              containerPort: 21107
+            - name: pasv-08
+              containerPort: 21108
+            - name: pasv-09
+              containerPort: 21109
+            - name: pasv-10
+              containerPort: 21110
+            - name: pasv-11
+              containerPort: 21111
+            - name: pasv-12
+              containerPort: 21112
+            - name: pasv-13
+              containerPort: 21113
+            - name: pasv-14
+              containerPort: 21114
+            - name: pasv-15
+              containerPort: 21115
+            - name: pasv-16
+              containerPort: 21116
+            - name: pasv-17
+              containerPort: 21117
+            - name: pasv-18
+              containerPort: 21118
+            - name: pasv-19
+              containerPort: 21119
+          env:
+            - name: FTP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: filegrid-secrets
+                  key: FTP_USER
+            - name: FTP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: filegrid-secrets
+                  key: FTP_PASSWORD
+            - name: FTP_PASV_MIN_PORT
+              value: "21100"
+            - name: FTP_PASV_MAX_PORT
+              value: "21119"
+            # Fixed ClusterIP of the `ftp` Service injected by Kubernetes:
+            # PASV replies always advertise the same cluster address as the
+            # control connection, surviving pod restarts.
+            - name: FTP_PASV_ADDRESS
+              value: "$(FTP_SERVICE_HOST)"
+          volumeMounts:
+            - name: ftp-data
+              mountPath: /srv/ftp
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          readinessProbe:
+            tcpSocket:
+              port: 21
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: 21
+            initialDelaySeconds: 10
+            periodSeconds: 10
+  volumeClaimTemplates:
+    - metadata:
+        name: ftp-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ftp
+  namespace: filegrid
+spec:
+  selector:
+    app.kubernetes.io/name: ftp
+  ports:
+    - name: control
+      port: 21
+      targetPort: 21
+    - name: pasv-00
+      port: 21100
+      targetPort: 21100
+    - name: pasv-01
+      port: 21101
+      targetPort: 21101
+    - name: pasv-02
+      port: 21102
+      targetPort: 21102
+    - name: pasv-03
+      port: 21103
+      targetPort: 21103
+    - name: pasv-04
+      port: 21104
+      targetPort: 21104
+    - name: pasv-05
+      port: 21105
+      targetPort: 21105
+    - name: pasv-06
+      port: 21106
+      targetPort: 21106
+    - name: pasv-07
+      port: 21107
+      targetPort: 21107
+    - name: pasv-08
+      port: 21108
+      targetPort: 21108
+    - name: pasv-09
+      port: 21109
+      targetPort: 21109
+    - name: pasv-10
+      port: 21110
+      targetPort: 21110
+    - name: pasv-11
+      port: 21111
+      targetPort: 21111
+    - name: pasv-12
+      port: 21112
+      targetPort: 21112
+    - name: pasv-13
+      port: 21113
+      targetPort: 21113
+    - name: pasv-14
+      port: 21114
+      targetPort: 21114
+    - name: pasv-15
+      port: 21115
+      targetPort: 21115
+    - name: pasv-16
+      port: 21116
+      targetPort: 21116
+    - name: pasv-17
+      port: 21117
+      targetPort: 21117
+    - name: pasv-18
+      port: 21118
+      targetPort: 21118
+    - name: pasv-19
+      port: 21119
+      targetPort: 21119
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: ftp
+  namespace: filegrid
+spec:
+  maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ftp

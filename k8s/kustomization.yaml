@@ -1,0 +1,82 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: filegrid
+
+resources:
+  - namespace.yaml
+  - storages.yaml
+  - keycloak.yaml
+  - backend.yaml
+  - frontend.yaml
+  - observability.yaml
+  - ingress.yaml
+  - network-policies.yaml
+
+configMapGenerator:
+  - name: postgres-initdb
+    options:
+      disableNameSuffixHash: true
+    files:
+      - ../infra/postgres/initdb/01-roles.sh
+      - ../infra/postgres/initdb/02-keycloak.sh
+  - name: db-migrations
+    options:
+      disableNameSuffixHash: true
+    files:
+      - ../db/migration/V1__baseline.sql
+      - ../db/migration/V2__client_submitter.sql
+      - ../db/migration/V3__customer_account.sql
+  - name: minio-init
+    options:
+      disableNameSuffixHash: true
+    files:
+      - ../infra/minio/init.sh
+      - ../infra/minio/filegrid-app-policy.json
+  - name: keycloak-realm
+    options:
+      disableNameSuffixHash: true
+    files:
+      - ../infra/keycloak/realm/filegrid-realm.json
+  - name: prometheus-rules
+    options:
+      disableNameSuffixHash: true
+    files:
+      - ../infra/observability/prometheus/rules/filegrid-alerts.yml
+  - name: blackbox-config
+    options:
+      disableNameSuffixHash: true
+    files:
+      - ../infra/observability/blackbox/blackbox.yml
+  - name: alertmanager-config
+    options:
+      disableNameSuffixHash: true
+    files:
+      - ../infra/observability/alertmanager/alertmanager.yml
+  - name: loki-config
+    options:
+      disableNameSuffixHash: true
+    files:
+      - ../infra/observability/loki/loki.yml
+  - name: tempo-config
+    options:
+      disableNameSuffixHash: true
+    files:
+      - ../infra/observability/tempo/tempo.yml
+  - name: grafana-datasources
+    options:
+      disableNameSuffixHash: true
+    files:
+      - ../infra/observability/grafana/provisioning/datasources/datasources.yml
+  - name: grafana-dashboards-provider
+    options:
+      disableNameSuffixHash: true
+    files:
+      - ../infra/observability/grafana/provisioning/dashboards/dashboards.yml
+  - name: grafana-dashboards
+    options:
+      disableNameSuffixHash: true
+    files:
+      - ../infra/observability/grafana/dashboards/filegrid-overview.json
+      - ../infra/observability/grafana/dashboards/filegrid-storage.json
+      - ../infra/observability/grafana/dashboards/filegrid-meters.json
