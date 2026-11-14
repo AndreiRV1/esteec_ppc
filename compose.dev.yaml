@@ -1,0 +1,23 @@
+# Local-development overlay: exposes the storages on 127.0.0.1 so a backend
+# running on the host (IDE, `./mvnw spring-boot:run`) can reach them.
+# Never use this file on a shared or public machine.
+#
+#   docker compose -f compose.yaml -f compose.dev.yaml up -d   (or: make dev)
+services:
+  postgres:
+    ports:
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5432}:5432"
+
+  minio:
+    ports:
+      - "127.0.0.1:${MINIO_HOST_PORT:-9000}:9000"
+      - "127.0.0.1:${MINIO_CONSOLE_HOST_PORT:-9001}:9001"
+
+  ftp:
+    environment:
+      # Host clients connect through the published ports, so PASV replies
+      # must point at the host loopback, not the container IP.
+      FTP_PASV_ADDRESS: 127.0.0.1
+    ports:
+      - "127.0.0.1:${FTP_HOST_PORT:-2121}:21"
+      - "127.0.0.1:21100-21119:21100-21119"

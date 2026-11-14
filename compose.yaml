@@ -1,0 +1,123 @@
+# FileGrid storage layer: PostgreSQL, MinIO (S3) and vsftpd (FTP).
+#
+# Nothing here publishes a port: the storages are reachable only from the
+# `backend` network, i.e. through FileGrid. For local development (backend
+# running on the host) layer compose.dev.yaml on top, which binds the ports
+# to 127.0.0.1 only. See README.md.
+name: filegrid
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  postgres:
+    image: postgres:18-alpine@sha256:1018733457011bf88d81db98cf43aac6d5150afc18787dbe204771fedf80ff95
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-filegrid}
+      POSTGRES_USER: ${POSTGRES_SUPERUSER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:?missing - run `make env`}
+      # Consumed by infra/postgres/initdb/01-roles.sh on first start only.
+      FILEGRID_DB_MIGRATOR_PASSWORD: ${FILEGRID_DB_MIGRATOR_PASSWORD:?missing - run `make env`}
+      FILEGRID_DB_APP_PASSWORD: ${FILEGRID_DB_APP_PASSWORD:?missing - run `make env`}
+    volumes:
+      # PG 18 images keep data under /var/lib/postgresql/<major>/docker.
+      - pg-data:/var/lib/postgresql
+      - ./infra/postgres/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      # Probe over TCP: during initdb the image runs a socket-only server,
+      # and a socket probe would report "healthy" too early.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 15s
+    networks: [backend]
+    logging: *default-logging
+
+  # One-shot: applies db/migration/*.sql with the schema-owner role, then exits.
+  db-migrate:
+    image: flyway/flyway:11-alpine@sha256:df06535dfd6559ae5f0628c4761013dfa4ea6a30cf6e34294931d8091f55a18f
+    command: migrate
+    environment:
+      FLYWAY_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-filegrid}
+      FLYWAY_USER: filegrid_migrator
+      FLYWAY_PASSWORD: ${FILEGRID_DB_MIGRATOR_PASSWORD:?missing - run `make env`}
+      FLYWAY_SCHEMAS: filegrid
+      FLYWAY_CREATE_SCHEMAS: "false"
+      FLYWAY_LOCATIONS: filesystem:/flyway/sql
+      FLYWAY_CONNECT_RETRIES: "10"
+      FLYWAY_VALIDATE_MIGRATION_NAMING: "true"
+      REDGATE_DISABLE_TELEMETRY: "true"
+    volumes:
+      - ./db/migration:/flyway/sql:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    networks: [backend]
+    logging: *default-logging
+
+  minio:
+    # Upstream stopped publishing minio/minio images in 2025; Chainguard's build
+    # is rebuilt on every upstream release. Pinned by digest for reproducibility.
+    image: cgr.dev/chainguard/minio@sha256:0f9fda72fbc6bd3560ea903aec2ceefa20f6ba82628d67656f37fb370c39ae9c
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?missing - run `make env`}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?missing - run `make env`}
+    volumes:
+      - minio-data:/data
+    # Distroless image (no shell/curl), so readiness is checked by minio-init
+    # with `mc ready`; dependants should wait on minio-init completing.
+    networks: [backend]
+    logging: *default-logging
+
+  # One-shot: creates buckets (versioned) and a least-privilege app user.
+  minio-init:
+    image: cgr.dev/chainguard/minio-client:latest-dev@sha256:e1f3f37e8b13f34be49494f441ca01ff7be4e05d7cf04bf26681b0fe380852e1
+    entrypoint: ["/bin/sh", "/init/init.sh"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?missing - run `make env`}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?missing - run `make env`}
+      FILEGRID_S3_ACCESS_KEY: ${FILEGRID_S3_ACCESS_KEY:?missing - run `make env`}
+      FILEGRID_S3_SECRET_KEY: ${FILEGRID_S3_SECRET_KEY:?missing - run `make env`}
+    volumes:
+      - ./infra/minio:/init:ro
+    depends_on:
+      - minio
+    restart: "no"
+    networks: [backend]
+    logging: *default-logging
+
+  ftp:
+    build: ./infra/vsftpd
+    image: filegrid/vsftpd:local
+    restart: unless-stopped
+    environment:
+      FTP_USER: ${FTP_USER:?missing - run `make env`}
+      FTP_PASSWORD: ${FTP_PASSWORD:?missing - run `make env`}
+      # Address advertised in PASV replies. Empty = the container's own IP,
+      # which is right for clients on the `backend` network.
+      FTP_PASV_ADDRESS: ""
+    volumes:
+      - ftp-data:/srv/ftp
+    healthcheck:
+      test: ["CMD", "nc", "-z", "127.0.0.1", "21"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [backend]
+    logging: *default-logging
+
+networks:
+  backend:
+
+volumes:
+  pg-data:
+  minio-data:
+  ftp-data:
