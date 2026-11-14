@@ -123,6 +123,15 @@ invisible (there is no clean-up job yet).
   `encryptAtRest: false` (resumable parts cannot be encrypted at rest).
   Meter readings are always stored in PostgreSQL and have no policy.
 
+## Statistics (admin)
+
+`GET /admin/statistics` → `{generatedAt, storageFit, normalVsPeak, regionalInsights}` for the admin
+statistics page. `storageFit`: per category, measured p50/p95/p99, throughput and error rate per
+backend, from this replica's metrics since it started (Grafana has the history across replicas).
+`normalVsPeak`: median vs busiest day of the last 30 days, from the database. `regionalInsights`:
+meters, readings and anomalies (24 h), faults (30 d) and hotspots per region. A value that has not
+been measured is `null`.
+
 ## Connection requests (racordare)
 
 Unchanged; see [`racordare.md`](racordare.md). An `employee` can now submit a

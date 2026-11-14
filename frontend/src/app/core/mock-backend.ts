@@ -2,7 +2,7 @@ import { HttpErrorResponse, HttpHeaders, HttpInterceptorFn, HttpRequest, HttpRes
 import { inject } from '@angular/core';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
-import { catchError, delay, from } from 'rxjs';
+import { delay, from } from 'rxjs';
 import { AuthService } from './auth';
 import { APP_CONFIG } from './config';
 import {
@@ -13,9 +13,8 @@ import { COUNTIES } from './format';
 
 /**
  * Mock mode: answers every /api call from in-memory fixtures that follow the
- * contract, so each page can be shown without a backend. In real mode, it lets
- * every call hit the backend first and falls back to the fixtures if an endpoint
- * is not deployed on the backend yet (404 / unexposed route).
+ * contract, so each page can be shown without a backend. In real mode every call
+ * goes to the backend, and its errors are shown as they are (never fixtures).
  */
 export const mockBackendInterceptor: HttpInterceptorFn = (request, next) => {
   if (!request.url.startsWith('/api/v1/')) return next(request);
@@ -24,24 +23,7 @@ export const mockBackendInterceptor: HttpInterceptorFn = (request, next) => {
   if (config.mock) {
     return from(handle(request, role)).pipe(delay(250));
   }
-  return next(request).pipe(
-    catchError((err: unknown) => {
-      if (err instanceof HttpErrorResponse && (err.status === 404 || err.status === 403)) {
-        const path = request.url.replace('/api/v1', '');
-        const isUnimplementedOnBackend =
-          path.startsWith('/me') ||
-          path.startsWith('/fault-records') ||
-          path.startsWith('/drone-videos') ||
-          path.startsWith('/admin/storage-policies') ||
-          path.startsWith('/admin/statistics') ||
-          (role === 'admin' && path.startsWith('/connection-requests'));
-        if (isUnimplementedOnBackend) {
-          return from(handle(request, role));
-        }
-      }
-      throw err;
-    }),
-  );
+  return next(request);
 };
 
 const HOUR = 3_600_000;

@@ -11,7 +11,9 @@ for tool in curl jq shasum; do
   command -v "$tool" >/dev/null || { echo "$tool is required" >&2; exit 1; }
 done
 set -a
-. "${FILEGRID_ENV_FILE:-./.env}"
+ENV_FILE="${FILEGRID_ENV_FILE:-.env}"
+case "$ENV_FILE" in */*) ;; *) ENV_FILE="./$ENV_FILE" ;; esac # `.` looks bare names up in $PATH
+. "$ENV_FILE"
 set +a
 
 # Everything goes through the TLS proxy (the single entry point).

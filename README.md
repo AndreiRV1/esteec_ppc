@@ -65,7 +65,7 @@ See [`docs/platform.md`](docs/platform.md) for the full table of `make up` vs `m
 ```sh
 make seed                              # generate simulated meter fleet and load into filegrid.meter
 make seed-clients CLIENTS=5            # create Keycloak + customer_account logins (writes db/seed/clients.csv)
-make sim                               # stream smart-meter readings through the proxy
+make sim                               # extra run with custom flags (`make up` already starts a real-time simulator; SIMULATOR=0 to skip)
 make gen-data                          # generate regional fault JSONs (1-10 MB) and drone MP4 videos
 make gen-storm                         # generate 10x storm spike dataset
 make gen-large-video                   # generate >1 GB drone video for constant-memory multipart testing

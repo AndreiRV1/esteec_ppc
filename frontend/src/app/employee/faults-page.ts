@@ -118,7 +118,7 @@ const emptyUpload = () => ({
                       <td data-label="Stare">{{ fault.restoredAt ? 'Restabilită' : 'În desfășurare' }}</td>
                       <td>
                         <button class="secondary small" type="button" [disabled]="downloading()" (click)="download(fault)">
-                          Descarcă @if (fault.sizeBytes) { ({{ fault.sizeBytes | bytes }}) }
+                          Descarcă @if (fault.file?.sizeBytes ?? fault.sizeBytes; as size) { ({{ size | bytes }}) }
                         </button>
                       </td>
                     </tr>

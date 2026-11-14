@@ -186,6 +186,7 @@ const MESSAGES: Record<string, string> = {
   storage_unavailable: 'Spațiul de stocare pentru această categorie nu răspunde. Încearcă din nou în câteva minute.',
   integrity_check_failed: 'Fișierul nu a trecut verificarea de integritate și nu a fost livrat.',
   not_found: 'Nu am găsit ce căutai.',
+  no_customer_account: 'Contul tău nu este asociat unui contor. Autentifică-te cu un cont de client (cl-…).',
 };
 
 /** A message a person can act on, in Romanian, for any failed call. */

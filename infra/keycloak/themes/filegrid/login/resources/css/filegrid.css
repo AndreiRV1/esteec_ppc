@@ -1,0 +1,110 @@
+@font-face { font-family: 'Barlow'; font-weight: 400; font-display: swap; src: url('../fonts/barlow-latin-400-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Barlow'; font-weight: 400; font-display: swap; src: url('../fonts/barlow-latin-ext-400-normal.woff2') format('woff2'); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: 'Barlow'; font-weight: 600; font-display: swap; src: url('../fonts/barlow-latin-600-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Barlow'; font-weight: 600; font-display: swap; src: url('../fonts/barlow-latin-ext-600-normal.woff2') format('woff2'); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: 'Barlow'; font-weight: 700; font-display: swap; src: url('../fonts/barlow-latin-700-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Barlow'; font-weight: 700; font-display: swap; src: url('../fonts/barlow-latin-ext-700-normal.woff2') format('woff2'); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+
+/* Same tokens as the FileGrid app (frontend/src/styles.css). */
+:root {
+  --fg-ink: #1b2836;
+  --fg-ink-muted: #586676;
+  --fg-surface: #eef2f6;
+  --fg-line: #dde4eb;
+  --fg-line-strong: #b9c4cf;
+  --fg-primary: #1f5bc6;
+  --fg-primary-dark: #17469c;
+  --fg-critical: #b3261e;
+  --fg-shadow: 0 1px 2px rgb(27 40 54 / 0.05), 0 12px 32px -12px rgb(27 40 54 / 0.18);
+
+  --pf-v5-global--FontFamily--text: 'Barlow', system-ui, sans-serif;
+  --pf-v5-global--FontFamily--heading: 'Barlow', system-ui, sans-serif;
+  --pf-v5-global--FontFamily--redhat-updated--heading: 'Barlow', system-ui, sans-serif;
+  --pf-v5-global--FontFamily--redhat-updated--sans-serif: 'Barlow', system-ui, sans-serif;
+  --pf-v5-global--Color--100: var(--fg-ink);
+  --pf-v5-global--Color--200: var(--fg-ink-muted);
+  --pf-v5-global--primary-color--100: var(--fg-primary);
+  --pf-v5-global--primary-color--200: var(--fg-primary-dark);
+  --pf-v5-global--link--Color: var(--fg-primary);
+  --pf-v5-global--link--Color--hover: var(--fg-primary-dark);
+  --pf-v5-global--BorderRadius--sm: 8px;
+  --pf-v5-global--BorderColor--100: var(--fg-line-strong);
+  --pf-v5-global--danger-color--100: var(--fg-critical);
+}
+
+html, body, .pf-v5-c-login, .pf-v5-c-login__container { background: var(--fg-surface) !important; color: var(--fg-ink); }
+body { font-family: 'Barlow', system-ui, sans-serif; -webkit-font-smoothing: antialiased; caret-color: var(--fg-primary); }
+::selection { background: #c9daf8; color: var(--fg-ink); }
+
+.login-pf body { background-image: none !important; }
+/* The parent fixes the column at 34rem; a fluid column keeps the card inside narrow screens. */
+.pf-v5-c-login__container { grid-template-columns: minmax(0, 1fr); max-width: 460px; margin-inline: auto; padding-inline: 16px; }
+
+/* Brand above the card: the app's bolt mark and wordmark. The parent forces white uppercase text; undo it. */
+#kc-header-wrapper {
+  display: flex; align-items: center; justify-content: center; gap: 12px;
+  font: 700 1.6rem/1.2 'Barlow', system-ui, sans-serif !important;
+  letter-spacing: -0.01em !important; text-transform: none !important;
+  color: var(--fg-ink) !important;
+}
+#kc-header-wrapper::before { content: ''; width: 38px; height: 38px; flex: none; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='7' fill='%231b2836'/%3E%3Cpath d='M13.2 4.5 7.5 13.2h4.1l-1 6.3 5.9-8.9h-4.2z' fill='%23f2b31c'/%3E%3C/svg%3E") center / contain no-repeat; }
+.pf-v5-c-login__header { padding-block: 48px 24px; }
+
+.pf-v5-c-login__main {
+  background: #fff; border: 1px solid var(--fg-line); border-radius: 14px; box-shadow: var(--fg-shadow);
+}
+.pf-v5-c-login__main-header { border-top: 0; padding: 32px 32px 4px; }
+#kc-page-title { font: 600 1.45rem/1.25 'Barlow', system-ui, sans-serif; letter-spacing: -0.01em; color: var(--fg-ink); text-align: left; }
+.pf-v5-c-login__main-body { padding-inline: 32px; }
+.pf-v5-c-login__main-footer { padding-inline: 32px; }
+@media (max-width: 480px) {
+  .pf-v5-c-login__main-header { padding: 24px 20px 4px; }
+  .pf-v5-c-login__main-body, .pf-v5-c-login__main-footer { padding-inline: 20px; }
+}
+.pf-v5-c-form { gap: 20px; }
+.pf-v5-c-login__main-footer-band { background: #f8fafc; border-top: 1px solid var(--fg-line); border-radius: 0 0 14px 14px; }
+
+/* Fields: one outline per box. A password field is an input plus the show/hide button, so the
+   outline and focus ring go on the group that holds both, never on the parts. */
+.pf-v5-c-form__label-text { font-weight: 500; color: var(--fg-ink); }
+.pf-v5-c-form-control::before, .pf-v5-c-form-control::after { display: none !important; }
+.pf-v5-c-form-control, .pf-v5-c-input-group:has(> * > .pf-v5-c-form-control) {
+  border: 1px solid var(--fg-line-strong); border-radius: 8px; min-height: 44px; background: #fff;
+  transition: border-color 120ms ease-out, box-shadow 120ms ease-out;
+}
+.pf-v5-c-input-group:has(> * > .pf-v5-c-form-control) { overflow: hidden; }
+.pf-v5-c-input-group .pf-v5-c-form-control { border: 0; border-radius: 0; min-height: 42px; box-shadow: none !important; }
+.pf-v5-c-form-control:hover, .pf-v5-c-input-group:has(> * > .pf-v5-c-form-control):hover { border-color: var(--fg-ink-muted); }
+.pf-v5-c-form-control:focus-within, .pf-v5-c-input-group:has(> * > .pf-v5-c-form-control):focus-within {
+  border-color: var(--fg-primary); box-shadow: 0 0 0 3px rgb(31 91 198 / 0.22);
+}
+.pf-v5-c-form-control.pf-m-error, .pf-v5-c-input-group:has(.pf-v5-c-form-control.pf-m-error) { border-color: var(--fg-critical); }
+.pf-v5-c-form-control > input { font-size: 1rem; padding-inline: 12px; }
+.pf-v5-c-form-control > input:focus, .pf-v5-c-form-control > input:focus-visible { outline: none; }
+.pf-v5-c-input-group .pf-v5-c-button.pf-m-control {
+  --pf-v5-c-button--after--BorderColor: transparent; --pf-v5-c-button--hover--after--BorderColor: transparent;
+  border-radius: 0; color: var(--fg-ink-muted); background: transparent;
+}
+.pf-v5-c-input-group .pf-v5-c-button.pf-m-control:hover { color: var(--fg-ink); background: var(--fg-surface); }
+.pf-v5-c-input-group .pf-v5-c-button.pf-m-control:focus-visible { outline: none; background: var(--fg-surface); color: var(--fg-primary); }
+
+.pf-v5-c-button { font-weight: 600; border-radius: 8px; }
+.pf-v5-c-button.pf-m-primary {
+  min-height: 44px; background: var(--fg-primary); box-shadow: 0 1px 2px rgb(23 70 156 / 0.25);
+  transition: background-color 120ms ease-out;
+}
+.pf-v5-c-button.pf-m-primary:hover { background: var(--fg-primary-dark); }
+.pf-v5-c-button.pf-m-secondary { --pf-v5-c-button--after--BorderColor: var(--fg-line-strong); color: var(--fg-ink); }
+:focus-visible { outline: 3px solid rgb(31 91 198 / 0.45); outline-offset: 2px; }
+
+a { text-underline-offset: 3px; }
+.pf-v5-c-check__input { accent-color: var(--fg-primary); }
+
+/* Alerts: tinted panel without the heavy top stripe. */
+.pf-v5-c-alert { border-radius: 8px; box-shadow: none; border: 1px solid var(--fg-line); --pf-v5-c-alert--BorderTopWidth: 0; }
+.pf-v5-c-alert.pf-m-danger { background: #fcecea; border-color: #efc4c0; }
+.pf-v5-c-alert.pf-m-success { background: #e6f4ec; border-color: #b5dcc6; }
+.pf-v5-c-alert.pf-m-warning { background: #fff5d6; border-color: #ecc96a; }
+.pf-v5-c-alert.pf-m-info { background: #e8effb; border-color: #c4d5f3; }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }

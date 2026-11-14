@@ -26,6 +26,9 @@ COMPOSE = ["docker", "compose"] + (
 )
 
 
+DEMO_CLIENT = "client.demo@filegrid.local"
+
+
 def run(service, command, stdin=None):
     """Runs a shell command inside a service container and returns its stdout."""
     result = subprocess.run(COMPOSE + ["exec", "-T", service, "sh", "-c", command],
@@ -78,6 +81,11 @@ def main():
 
     values = ",\n".join(f"('{c['username']}', '{c['region']}', '{c['meter_id']}')" for c in clients)
     psql(f"INSERT INTO filegrid.customer_account (username, region, meter_id) VALUES\n{values}\n"
+         "ON CONFLICT DO NOTHING;")
+    # The realm's own demo client gets a meter too, so its portal shows data (no-op once linked).
+    psql(f"INSERT INTO filegrid.customer_account (username, region, meter_id) "
+         f"SELECT '{DEMO_CLIENT}', m.region, m.id FROM filegrid.meter m WHERE m.active AND NOT EXISTS "
+         "(SELECT 1 FROM filegrid.customer_account a WHERE a.meter_id = m.id) ORDER BY m.id LIMIT 1 "
          "ON CONFLICT DO NOTHING;")
 
     OUT.parent.mkdir(parents=True, exist_ok=True)

@@ -35,6 +35,11 @@ services:
     ports:
       # Direct access for the host backend (JWKS) and for Keycloak administration.
       - "127.0.0.1:${KEYCLOAK_HOST_PORT:-8180}:8080"
+    environment:
+      # Theme edits show up on reload instead of being cached by Keycloak and the browser.
+      KC_SPI_THEME__CACHE_THEMES: "false"
+      KC_SPI_THEME__CACHE_TEMPLATES: "false"
+      KC_SPI_THEME__STATIC_MAX_AGE: "-1"
 
   proxy:
     environment:

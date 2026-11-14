@@ -145,6 +145,7 @@ services:
       GRAFANA_OAUTH_CLIENT_SECRET: ${GRAFANA_OAUTH_CLIENT_SECRET:?missing - run `make env`}
     volumes:
       - ./infra/keycloak/realm:/opt/keycloak/data/import:ro
+      - ./infra/keycloak/themes/filegrid:/opt/keycloak/themes/filegrid:ro
     healthcheck:
       # No curl in the image: plain HTTP over bash's /dev/tcp to the management port.
       test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /auth/health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && grep -q '\"UP\"' <&3"]
@@ -241,6 +242,29 @@ services:
     restart: unless-stopped
     environment:
       KEYCLOAK_URL: ${FILEGRID_PUBLIC_URL:-https://localhost:8443}/auth
+    networks: [edge]
+    logging: *default-logging
+
+  # Simulated smart meters, in real time, through the proxy like real devices.
+  # The fleet must match the meters loaded by `make seed` (same count, seed 42).
+  # `make up SIMULATOR=0` (or `docker compose stop simulator`) turns it off.
+  simulator:
+    profiles: ["simulator"]
+    build: ./simulator
+    image: filegrid/meter-simulator:local
+    restart: unless-stopped
+    environment:
+      FILEGRID_METER_API_KEY: ${FILEGRID_METER_API_KEY:?missing - run `make env`}
+      SIMULATOR_SINK_URL: http://proxy:8080/api/v1/meter-readings
+      SIMULATOR_METERS_COUNT: ${SIMULATOR_METERS_COUNT:-300}
+      # Demo cadence: every meter reports each minute, 1-2 intervals per message (~3-5 msg/s
+      # for 300 meters), so dashboards fill within a minute. Real meters: 15 / 1 / 8 / 2m.
+      SIMULATOR_REPORTING_INTERVAL_MINUTES: ${SIMULATOR_INTERVAL_MINUTES:-1}
+      SIMULATOR_REPORTING_BATCH_MIN: ${SIMULATOR_BATCH_MIN:-1}
+      SIMULATOR_REPORTING_BATCH_MAX: ${SIMULATOR_BATCH_MAX:-2}
+      SIMULATOR_REPORTING_SEND_JITTER: ${SIMULATOR_SEND_JITTER:-50s}
+    depends_on:
+      proxy: { condition: service_healthy }
     networks: [edge]
     logging: *default-logging
 
