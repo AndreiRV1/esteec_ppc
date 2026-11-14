@@ -51,6 +51,8 @@ const ROLE_NAME: Record<Role, string> = { admin: 'Administrator', employee: 'Ang
                 <option value="employee">Angajat</option>
               </select>
             </label>
+          } @else if (!auth.username) {
+            <button class="secondary small" type="button" (click)="auth.logout()">Autentificare</button>
           } @else {
             <span class="avatar" aria-hidden="true">{{ initial }}</span>
             <span class="who">

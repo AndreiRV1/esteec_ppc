@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Optional;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 import ro.ppc.filegrid.account.Accounts.Account;
 import ro.ppc.filegrid.account.Accounts.Bucket;
 import ro.ppc.filegrid.account.Accounts.ConsumptionSummary;
@@ -36,6 +37,55 @@ public class AccountRepository {
                 .query((rs, n) -> new Account(rs.getString("username"), Region.valueOf(rs.getString("region")),
                         rs.getString("county"), rs.getString("locality"), rs.getString("meter_id")))
                 .optional();
+    }
+
+    /**
+     * Links a client to a meter once one of their racordare requests is accepted (the first one):
+     * a free meter of the installed fleet in that region, same county and locality first, so it
+     * already reports; otherwise a new meter registered at the requested place. No-op otherwise.
+     */
+    @Transactional
+    public Optional<Account> provisionFromAcceptedRequest(String username, String subject) {
+        record Request(String clientId, String region, String county, String locality) {
+        }
+        Optional<Request> request = jdbc.sql("""
+                        SELECT client_id, region, county, locality FROM client
+                        WHERE submitted_by = :subject AND status = 'ACCEPTED'
+                        ORDER BY reviewed_at LIMIT 1
+                        """)
+                .param("subject", subject)
+                .query((rs, n) -> new Request(rs.getString("client_id"), rs.getString("region"),
+                        rs.getString("county"), rs.getString("locality")))
+                .optional();
+        if (request.isEmpty()) return Optional.empty();
+        Request r = request.get();
+        String meterId = jdbc.sql("""
+                        SELECT id FROM meter m
+                        WHERE m.region = :region AND m.active
+                          AND NOT EXISTS (SELECT 1 FROM customer_account a WHERE a.meter_id = m.id)
+                        ORDER BY (m.county = :county) DESC, (m.locality = :locality) DESC, m.id
+                        LIMIT 1 FOR UPDATE SKIP LOCKED
+                        """)
+                .param("region", r.region()).param("county", r.county()).param("locality", r.locality())
+                .query(String.class).optional()
+                .orElseGet(() -> {
+                    // Outside the simulated fleet's numbers (which stay below 9,000,000).
+                    String id = "MTR-%s-%07d".formatted(r.region().charAt(0),
+                            9_000_000 + Math.floorMod(r.clientId().hashCode(), 1_000_000));
+                    jdbc.sql("""
+                                    INSERT INTO meter (id, region, county, locality) VALUES (:id, :region, :county, :locality)
+                                    ON CONFLICT (id) DO NOTHING
+                                    """)
+                            .param("id", id).param("region", r.region()).param("county", r.county())
+                            .param("locality", r.locality()).update();
+                    return id;
+                });
+        jdbc.sql("""
+                        INSERT INTO customer_account (username, region, meter_id) VALUES (:username, :region, :meterId)
+                        ON CONFLICT DO NOTHING
+                        """)
+                .param("username", username).param("region", r.region()).param("meterId", meterId).update();
+        return find(username);
     }
 
     /** Energy per bucket; negative (invalid) readings are left out of the sum but counted as anomalies. */

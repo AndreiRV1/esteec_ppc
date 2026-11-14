@@ -143,6 +143,7 @@ services:
       FILEGRID_DEMO_EMPLOYEE_PASSWORD: ${FILEGRID_DEMO_EMPLOYEE_PASSWORD:?missing - run `make env`}
       FILEGRID_PUBLIC_URL: ${FILEGRID_PUBLIC_URL:-https://localhost:8443}
       GRAFANA_OAUTH_CLIENT_SECRET: ${GRAFANA_OAUTH_CLIENT_SECRET:?missing - run `make env`}
+      FILEGRID_KEYCLOAK_BACKEND_SECRET: ${FILEGRID_KEYCLOAK_BACKEND_SECRET:?missing - run `make env`}
     volumes:
       - ./infra/keycloak/realm:/opt/keycloak/data/import:ro
       - ./infra/keycloak/themes/filegrid:/opt/keycloak/themes/filegrid:ro
@@ -176,6 +177,9 @@ services:
       FTP_PASSWORD: ${FTP_PASSWORD:?missing - run `make env`}
       FILEGRID_OIDC_ISSUER: ${FILEGRID_PUBLIC_URL:-https://localhost:8443}/auth/realms/filegrid
       FILEGRID_OIDC_JWKS_URI: http://keycloak:8080/auth/realms/filegrid/protocol/openid-connect/certs
+      # Creates applicant logins on registration (service account, manage-users only).
+      FILEGRID_KEYCLOAK_URL: http://keycloak:8080/auth
+      FILEGRID_KEYCLOAK_BACKEND_SECRET: ${FILEGRID_KEYCLOAK_BACKEND_SECRET:?missing - run `make env`}
       FILEGRID_MASTER_KEY_V1: ${FILEGRID_MASTER_KEY_V1:?missing - run `make env`}
       FILEGRID_IDENTITY_PEPPER: ${FILEGRID_IDENTITY_PEPPER:?missing - run `make env`}
       FILEGRID_METER_API_KEY: ${FILEGRID_METER_API_KEY:?missing - run `make env`}

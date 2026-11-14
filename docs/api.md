@@ -34,6 +34,7 @@ flow is in [`racordare.md`](racordare.md).
 | `/fault-records/**`, `/drone-videos/**` | `employee`, `admin` |
 | `/admin/**` | `admin` |
 | `POST /meter-readings` | meters (`X-API-Key`) |
+| `POST /public/connection-requests` | anyone (registration) |
 
 ## Me (customer portal)
 
@@ -53,6 +54,9 @@ e.g. `cl-0004211`). The account is linked to one meter.
 - `GET /me/faults` → faults in the customer's county that are not restored yet:
   `[{id, county, locality, substationCode, occurredAt, restoredAt, severity, cause, affectedCustomers}]`.
 - The three customer endpoints return `404` `no_customer_account` for other users.
+- A `client` whose racordare request was accepted gets an account on their first call: a free
+  meter of the installed (simulated) fleet in that region, same county first, else a new meter
+  registered at the requested place (it has no readings until it reports).
 
 ## Fault records
 
@@ -133,6 +137,13 @@ meters, readings and anomalies (24 h), faults (30 d) and hotspots per region. A 
 been measured is `null`.
 
 ## Connection requests (racordare)
+
+**Registration (no account):** `POST /public/connection-requests`, same multipart parts as
+`POST /connection-requests`, no token → `201 {username, password, request}`. A Keycloak login
+`cl-<8 digits>` (role `client`) is created for the applicant and the request is filed under it.
+The password is shown only in this answer. The login page's "Register" link opens `/register`
+in the app (theme `register.ftl`). Needs the `filegrid-backend` client (realm import, or
+`scripts/keycloak-sync.sh`, run by `make up`); otherwise `503 registration_unavailable`.
 
 Unchanged; see [`racordare.md`](racordare.md). An `employee` can now submit a
 request on an applicant's behalf and sees the requests they submitted. An admin

@@ -20,6 +20,12 @@ export const routes: Routes = [
     loadComponent: () => import('./employee/connection-form-page').then((m) => m.ConnectionFormPage),
   },
   {
+    // Public: a racordare without an account; the response carries the new client login.
+    path: 'register',
+    data: { publicForm: true },
+    loadComponent: () => import('./employee/connection-form-page').then((m) => m.ConnectionFormPage),
+  },
+  {
     path: 'admin',
     canActivate: [roleGuard],
     data: { roles: ['admin'] },
