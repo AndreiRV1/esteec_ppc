@@ -20,6 +20,8 @@ public record StoredFile(
         String encryptionKeyId,
         byte[] wrappedDek,
         Status status,
+        String uploadId,
+        long bytesReceived,
         String uploadedBy,
         Instant createdAt,
         Instant storedAt,

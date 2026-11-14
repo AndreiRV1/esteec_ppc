@@ -15,8 +15,9 @@ spring:
       connection-timeout: 5000
   servlet:
     multipart:
-      max-file-size: 10MB
-      max-request-size: 32MB
+      # Fault recordings are 1-10 MB; the storage policy sets the real limit per category.
+      max-file-size: 64MB
+      max-request-size: 70MB
       # Parts above this are spooled to disk, not held in memory.
       file-size-threshold: 256KB
   mvc:
@@ -80,6 +81,11 @@ filegrid:
     # How often pending raw readings are turned into meter_reading rows.
     process-interval: ${FILEGRID_METER_PROCESS_INTERVAL:5s}
     batch-size: 200
+    # false on instances that only ingest; at least one instance must run the processor.
+    processor-enabled: ${FILEGRID_METER_PROCESSOR_ENABLED:true}
+  uploads:
+    # Part size of resumable uploads (drone videos). S3 needs at least 5 MB.
+    part-size: ${FILEGRID_UPLOAD_PART_SIZE:8MB}
   crypto:
     active-key-id: ${FILEGRID_MASTER_KEY_ID:kek-v1}
     master-keys:

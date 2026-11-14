@@ -10,13 +10,15 @@ import org.springframework.security.web.SecurityFilterChain;
 
 /**
  * Stateless bearer-token API. Tokens are issued by Keycloak (realm `filegrid`);
- * realm roles become authorities: `client` -> ROLE_CLIENT, `admin` -> ROLE_ADMIN.
+ * realm roles become authorities: `client` -> ROLE_CLIENT, `employee` -> ROLE_EMPLOYEE,
+ * `admin` -> ROLE_ADMIN.
  */
 @Configuration
 public class SecurityConfig {
 
     public static final String CLIENT = "CLIENT";
     public static final String ADMIN = "ADMIN";
+    public static final String EMPLOYEE = "EMPLOYEE";
 
     @Bean
     SecurityFilterChain api(HttpSecurity http) throws Exception {
@@ -29,7 +31,11 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/admin/**").hasRole(ADMIN)
                         // Smart meters have no user account: MeterReadingController checks X-API-Key.
                         .requestMatchers(HttpMethod.POST, "/api/v1/meter-readings").permitAll()
-                        .requestMatchers("/api/v1/connection-requests/**").hasRole(CLIENT)
+                        // Applicants file their own requests; employees file them on an applicant's behalf.
+                        .requestMatchers("/api/v1/connection-requests/**").hasAnyRole(CLIENT, EMPLOYEE)
+                        .requestMatchers("/api/v1/fault-records/**", "/api/v1/drone-videos/**")
+                        .hasAnyRole(EMPLOYEE, ADMIN)
+                        .requestMatchers("/api/v1/me/**").authenticated()
                         .anyRequest().denyAll())
                 .oauth2ResourceServer(rs -> rs.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtConverter)))
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))

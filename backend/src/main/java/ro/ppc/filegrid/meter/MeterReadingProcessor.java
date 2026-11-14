@@ -53,6 +53,9 @@ public class MeterReadingProcessor {
     @Scheduled(initialDelayString = "${filegrid.meters.process-interval}",
             fixedDelayString = "${filegrid.meters.process-interval}")
     void run() {
+        if (!properties.processorEnabled()) {
+            return;
+        }
         int total = 0;
         int batch;
         do {

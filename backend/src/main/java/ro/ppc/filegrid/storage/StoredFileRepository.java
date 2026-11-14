@@ -46,20 +46,6 @@ public class StoredFileRepository {
                 .update();
     }
 
-    public void markStored(UUID id, long size, String sha256, String storedSha256) {
-        jdbc.sql("""
-                        UPDATE stored_file
-                        SET status = 'STORED', size_bytes = :size, bytes_received = :size,
-                            sha256 = :sha256, stored_sha256 = :storedSha256, stored_at = now()
-                        WHERE id = :id AND status = 'UPLOADING'
-                        """)
-                .param("id", id)
-                .param("size", size)
-                .param("sha256", sha256)
-                .param("storedSha256", storedSha256)
-                .update();
-    }
-
     public void markStatus(UUID id, StoredFile.Status status) {
         jdbc.sql("UPDATE stored_file SET status = :status WHERE id = :id")
                 .param("id", id)
@@ -69,6 +55,49 @@ public class StoredFileRepository {
 
     public void markVerified(UUID id) {
         jdbc.sql("UPDATE stored_file SET last_verified_at = now() WHERE id = :id").param("id", id).update();
+    }
+
+    /** Records what a resumable upload announced: until it is verified, size and sha256 are the declared values. */
+    public void beginUpload(UUID id, String uploadId, long declaredSize, String declaredSha256) {
+        jdbc.sql("""
+                        UPDATE stored_file SET upload_id = :uploadId, size_bytes = :size, sha256 = :sha256
+                        WHERE id = :id AND status = 'UPLOADING'
+                        """)
+                .param("id", id)
+                .param("uploadId", uploadId)
+                .param("size", declaredSize)
+                .param("sha256", declaredSha256)
+                .update();
+    }
+
+    public void addBytesReceived(UUID id, long bytes) {
+        jdbc.sql("UPDATE stored_file SET bytes_received = bytes_received + :bytes WHERE id = :id")
+                .param("id", id)
+                .param("bytes", bytes)
+                .update();
+    }
+
+    /** Locks the row until the end of the transaction, so two requests cannot write the same part. */
+    public Optional<StoredFile> lock(UUID id) {
+        return jdbc.sql("SELECT * FROM stored_file WHERE id = :id FOR UPDATE")
+                .param("id", id)
+                .query(StoredFileRepository::map)
+                .optional();
+    }
+
+    /** Returns false if the file was not UPLOADING any more (another request finished it). */
+    public boolean markStored(UUID id, long size, String sha256, String storedSha256) {
+        return jdbc.sql("""
+                        UPDATE stored_file
+                        SET status = 'STORED', size_bytes = :size, bytes_received = :size,
+                            sha256 = :sha256, stored_sha256 = :storedSha256, stored_at = now()
+                        WHERE id = :id AND status = 'UPLOADING'
+                        """)
+                .param("id", id)
+                .param("size", size)
+                .param("sha256", sha256)
+                .param("storedSha256", storedSha256)
+                .update() == 1;
     }
 
     public Optional<StoredFile> find(UUID id) {
@@ -94,13 +123,15 @@ public class StoredFileRepository {
                 rs.getString("encryption_key_id"),
                 rs.getBytes("wrapped_dek"),
                 StoredFile.Status.valueOf(rs.getString("status")),
+                rs.getString("upload_id"),
+                rs.getLong("bytes_received"),
                 rs.getString("uploaded_by"),
                 instant(rs, "created_at"),
                 instant(rs, "stored_at"),
                 instant(rs, "last_verified_at"));
     }
 
-    static Instant instant(ResultSet rs, String column) throws SQLException {
+    public static Instant instant(ResultSet rs, String column) throws SQLException {
         OffsetDateTime value = rs.getObject(column, OffsetDateTime.class);
         return value == null ? null : value.toInstant();
     }

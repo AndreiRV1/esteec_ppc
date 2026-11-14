@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """
-CLI entrypoint for FileGrid PPC Fault Records (JSON) & Drone Inspection Videos (MP4)
-data generation, regional tagging, and `make dev` storage ingestion.
+CLI for FileGrid PPC test data: fault records (JSON) and drone inspection videos (MP4).
+
+It generates files locally and sends them to FileGrid through its HTTP API, the
+only entry point for field data. It never touches PostgreSQL, FTP or S3.
 
 Usage examples:
   python3 backend/fault_videos/fault_videos.py generate
   python3 backend/fault_videos/fault_videos.py generate --profile storm --regions MUNTENIA
   python3 backend/fault_videos/fault_videos.py generate --large-video --large-video-mb 1050
-  python3 backend/fault_videos/fault_videos.py ingest
+  python3 backend/fault_videos/fault_videos.py ingest --workers 8
   python3 backend/fault_videos/fault_videos.py verify
   python3 backend/fault_videos/fault_videos.py status
 """
@@ -18,6 +20,7 @@ import argparse
 import json
 import shutil
 import sys
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -29,13 +32,15 @@ if str(REPO_ROOT) not in sys.path:
 
 from backend.fault_videos.catalog import REGIONS
 from backend.fault_videos.generator import generate_dataset, rebuild_manifest
-from backend.fault_videos.storage_client import FileGridAcquisitionService
+from backend.fault_videos import api_client
+from backend.fault_videos.api_client import DRONE_VIDEO, FAULT_RECORD, FileGridApi, Unavailable
 
 DEFAULT_DATA_DIR = SCRIPT_DIR / "data"
 
 
 def _print_manifest_summary(manifest: Dict[str, Any], data_dir: Path) -> None:
-    print(f"\n=== Generated Dataset Summary ({data_dir.relative_to(REPO_ROOT)}) ===")
+    shown = data_dir.relative_to(REPO_ROOT) if data_dir.is_relative_to(REPO_ROOT) else data_dir
+    print(f"\n=== Generated Dataset Summary ({shown}) ===")
     print(f"{'REGION':<12} {'FAULT_RECORD (JSON)':<22} {'DRONE_VIDEO (MP4)':<20} {'TOTAL SIZE (MB)':<16}")
     print("-" * 72)
     summary = manifest.get("summary_by_region", {})
@@ -86,74 +91,103 @@ def cmd_generate(args: argparse.Namespace) -> int:
     return 0
 
 
+def _select(items: List[Dict[str, Any]], args: argparse.Namespace) -> List[Dict[str, Any]]:
+    region = getattr(args, "region", None)
+    category = getattr(args, "category", None)
+    return [
+        it for it in items
+        if (not region or it.get("region") == region.upper())
+        and (not category or it.get("category") == category.upper())
+    ]
+
+
+def _percentile(values: List[float], q: float) -> float:
+    ordered = sorted(values)
+    return ordered[min(len(ordered) - 1, int(q * len(ordered)))] if ordered else 0.0
+
+
 def cmd_ingest(args: argparse.Namespace) -> int:
     data_dir = Path(args.data_dir).resolve()
-    manifest_path = data_dir / "manifest.json"
-    if not manifest_path.exists():
+    if not (data_dir / "manifest.json").exists():
         print("No manifest.json found; generating default dataset first...")
         manifest = generate_dataset(output_dir=data_dir)
     else:
         manifest = rebuild_manifest(data_dir)
 
-    items: List[Dict[str, Any]] = manifest.get("items", [])
-    if args.region:
-        reg_filter = args.region.upper()
-        items = [it for it in items if it.get("region") == reg_filter]
-    if args.category:
-        cat_filter = args.category.upper()
-        items = [it for it in items if it.get("category") == cat_filter]
-
+    items = _select(manifest.get("items", []), args)
     if not items:
         print("No matching files to ingest.")
         return 0
 
-    svc = FileGridAcquisitionService()
-    print(f"Ingesting {len(items)} file(s) into FileGrid storages (`make dev` stack)...")
-    print(
-        f"{'REGION':<10} {'CATEGORY':<15} {'BACKEND':<10} {'SIZE (MB)':<11} {'STATUS':<15} {'FILENAME'}"
-    )
-    print("-" * 95)
+    api = FileGridApi()
+    print(f"Uploading {len(items)} file(s) to FileGrid at {api.settings.api_base} "
+          f"as {api.settings.username} ({args.workers} worker(s))...")
+    print(f"{'REGION':<10} {'CATEGORY':<13} {'SIZE':>12}  {'STATUS':<9} {'TIME':>8}  FILENAME")
+    print("-" * 100)
+    started = time.monotonic()
+    try:
+        api.login()
+        stats = api_client.ingest(api, data_dir, items, workers=args.workers, force=args.force)
+    except Unavailable as exc:
+        print(f"FileGrid is not reachable: {exc}", file=sys.stderr)
+        return 2
+    elapsed = time.monotonic() - started
+    rebuild_manifest(data_dir)
 
-    for entry in items:
-        res = svc.ingest_entry(data_dir, entry)
-        sz_mb = res["size_bytes"] / (1024 * 1024)
-        fname = entry["file"]["original_filename"]
-        print(
-            f"{res['region']:<10} {res['category']:<15} {res['backend']:<10} "
-            f"{sz_mb:<11.2f} {res['status']:<15} {fname}"
-        )
-
-    print("-" * 95)
-    print("Ingestion complete.")
-    return 0
+    print("-" * 100)
+    print(f"{'CATEGORY':<13} {'UPLOADED':>8} {'RESUMED':>8} {'SKIPPED':>8} {'FAILED':>7} {'MB':>10} "
+          f"{'ELAPSED':>9} {'MB/s':>8} {'files/s':>8} {'avg s':>7} {'p95 s':>7}")
+    failed = 0
+    for cat in (FAULT_RECORD, DRONE_VIDEO):
+        s = stats[cat]
+        failed += s["failed"]
+        done = s["uploaded"] + s["resumed"]
+        wall = (s["last"] - s["first"]) if done else 0.0
+        mb = s["bytes"] / 1048576
+        avg = sum(s["seconds"]) / len(s["seconds"]) if s["seconds"] else 0.0
+        print(f"{cat:<13} {s['uploaded']:>8} {s['resumed']:>8} {s['skipped']:>8} {s['failed']:>7} {mb:>10.2f} "
+              f"{wall:>8.2f}s {mb / wall if wall > 0 else 0:>8.2f} {done / wall if wall > 0 else 0:>8.2f} "
+              f"{avg:>7.2f} {_percentile(s['seconds'], 0.95):>7.2f}")
+    print(f"Total time {elapsed:.2f}s, {api.retries} request(s) retried after a transient failure.")
+    if failed:
+        print(f"{failed} file(s) FAILED - run the command again to retry them.", file=sys.stderr)
+    return 1 if failed else 0
 
 
 def cmd_verify(args: argparse.Namespace) -> int:
-    svc = FileGridAcquisitionService()
-    results = svc.verify_all_stored(region_filter=args.region)
-    if not results:
-        print("No stored FAULT_RECORD or DRONE_VIDEO files found in database.")
+    data_dir = Path(args.data_dir).resolve()
+    if not data_dir.exists():
+        print(f"Local data directory ({data_dir}) does not exist yet. Run `generate` and `ingest` first.")
+        return 0
+    items = _select(rebuild_manifest(data_dir).get("items", []), args)
+    api = FileGridApi()
+    try:
+        api.login()
+        results = api_client.verify(api, data_dir, items, workers=args.workers)
+    except Unavailable as exc:
+        print(f"FileGrid is not reachable: {exc}", file=sys.stderr)
+        return 2
+
+    checked = [r for r in results if r["status"] != "NOT_UPLOADED"]
+    if not checked:
+        print(f"Nothing uploaded to {api.settings.api_base} yet. Run `ingest` first.")
         return 0
 
-    print(
-        f"\n{'REGION':<10} {'CATEGORY':<15} {'BACKEND':<10} {'SIZE (MB)':<11} {'INTEGRITY':<12} {'SHA-256 (prefix)'}"
-    )
-    print("-" * 88)
-    ok_count = 0
-    for r in results:
-        sz_mb = int(r.get("size_bytes", 0)) / (1024 * 1024)
-        verified = bool(r.get("verified"))
-        if verified:
-            ok_count += 1
-        status_str = "OK (MATCH)" if verified else "CORRUPTED"
-        sha_prefix = (r.get("actual_sha256") or r.get("error") or "")[:20]
-        print(
-            f"{r['region']:<10} {r['category']:<15} {r['backend']:<10} "
-            f"{sz_mb:<11.2f} {status_str:<12} {sha_prefix}..."
-        )
-    print("-" * 88)
-    print(f"Verified {ok_count}/{len(results)} stored file(s) bit-for-bit.\n")
-    return 0 if ok_count == len(results) else 1
+    print(f"\n{'REGION':<10} {'CATEGORY':<13} {'SIZE':>12}  {'INTEGRITY':<13} {'SHA-256 (prefix)':<22} FILENAME")
+    print("-" * 110)
+    ok = 0
+    for r in checked:
+        good = r["status"] in ("OK", "OK_NO_HEADER")
+        ok += good
+        print(f"{r['region']:<10} {r['category']:<13} {r['size_bytes'] / 1048576:>9.2f} MB  "
+              f"{r['status']:<13} {(r['actual'] or '-')[:20]:<22} {r['name']}")
+        if not good:
+            print(f"    expected {r['expected']}" + (f"; {r['error']}" if r.get("error") else ""))
+    print("-" * 110)
+    skipped = len(results) - len(checked)
+    print(f"Verified {ok}/{len(checked)} file(s) bit-for-bit through the API"
+          + (f" ({skipped} local file(s) not uploaded yet)." if skipped else ".") + "\n")
+    return 0 if ok == len(checked) else 1
 
 
 def cmd_status(args: argparse.Namespace) -> int:
@@ -162,42 +196,28 @@ def cmd_status(args: argparse.Namespace) -> int:
         manifest = rebuild_manifest(data_dir)
         _print_manifest_summary(manifest, data_dir)
     else:
+        manifest = {"items": []}
         print(f"Local data directory ({data_dir}) does not exist yet. Run `generate` first.")
 
-    svc = FileGridAcquisitionService()
+    api = FileGridApi()
+    uploaded = {r: {FAULT_RECORD: 0, DRONE_VIDEO: 0} for r in REGIONS}
+    for it in manifest.get("items", []):
+        if api_client.uploaded_record(it, api.settings.api_base) and it.get("region") in uploaded:
+            uploaded[it["region"]][it["category"]] += 1
     try:
-        with svc._pg() as pg:
-            policies = pg.query(
-                "SELECT region, category, backend, target, encrypt_at_rest "
-                "FROM storage_policy "
-                "WHERE category IN ('FAULT_RECORD', 'DRONE_VIDEO') "
-                "ORDER BY region, category;"
-            )
-            counts = pg.query(
-                "SELECT region, category, backend, status, count(*) AS cnt, "
-                "coalesce(round(sum(size_bytes) / 1048576.0, 2), 0) AS total_mb "
-                "FROM stored_file "
-                "WHERE category IN ('FAULT_RECORD', 'DRONE_VIDEO') "
-                "GROUP BY region, category, backend, status "
-                "ORDER BY region, category;"
-            )
-        print("=== Active Storage Policies in PostgreSQL (`filegrid.storage_policy`) ===")
-        for p in policies:
-            print(
-                f"  {p['region']:<10} | {p['category']:<14} -> {p['backend']:<8} "
-                f"(target={p['target']}, encrypt={p['encrypt_at_rest']})"
-            )
-        print("\n=== Stored Files in PostgreSQL (`filegrid.stored_file`) ===")
-        if not counts:
-            print("  (no files ingested yet)")
-        for c in counts:
-            print(
-                f"  {c['region']:<10} | {c['category']:<14} | {c['backend']:<8} | "
-                f"status={c['status']:<9} | count={c['cnt']} | {c['total_mb']} MB"
-            )
-        print()
-    except Exception as exc:
-        print(f"(Database not reachable on localhost:{svc.pg_port} — start with `make dev`: {exc})")
+        totals = api_client.remote_totals(api, REGIONS)
+    except (Unavailable, api_client.ApiError) as exc:
+        print(f"(FileGrid not reachable at {api.settings.api_base} - start it with `make up`: {exc})")
+        return 0
+
+    print(f"=== FileGrid ({api.settings.api_base}) ===")
+    print(f"{'REGION':<12} {'FAULT_RECORD total':<20} {'(from this dataset)':<21} "
+          f"{'DRONE_VIDEO total':<19} {'(from this dataset)'}")
+    print("-" * 95)
+    for reg in REGIONS:
+        print(f"{reg:<12} {totals[reg][FAULT_RECORD]:<20} {uploaded[reg][FAULT_RECORD]:<21} "
+              f"{totals[reg][DRONE_VIDEO]:<19} {uploaded[reg][DRONE_VIDEO]}")
+    print()
     return 0
 
 
@@ -213,7 +233,7 @@ def cmd_clean(args: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="FileGrid PPC — Fault Records (JSON) & Drone Videos (MP4) generator and ingestion tool."
+        description="FileGrid PPC - fault record (JSON) and drone video (MP4) test-data generator and API uploader."
     )
     parser.add_argument(
         "--data-dir",
@@ -289,21 +309,26 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_gen.set_defaults(func=cmd_generate)
 
-    p_ing = sub.add_parser("ingest", help="Ingest generated files into `make dev` storages per policy")
+    categories = [FAULT_RECORD, DRONE_VIDEO]
+
+    p_ing = sub.add_parser("ingest", help="Upload generated files through the FileGrid API (resumable, idempotent)")
     p_ing.add_argument("--region", choices=REGIONS, default=None, help="Filter by region")
+    p_ing.add_argument("--category", choices=categories, default=None, help="Filter by category")
+    p_ing.add_argument("--workers", type=int, default=4, help="Files uploaded in parallel (default: 4)")
     p_ing.add_argument(
-        "--category",
-        choices=["FAULT_RECORD", "DRONE_VIDEO"],
-        default=None,
-        help="Filter by category",
+        "--force",
+        action="store_true",
+        help="Upload again even if the local record says the file is already in FileGrid",
     )
     p_ing.set_defaults(func=cmd_ingest)
 
-    p_ver = sub.add_parser("verify", help="Verify SHA-256 integrity of all stored files in `make dev`")
+    p_ver = sub.add_parser("verify", help="Download uploaded files through the API and compare SHA-256")
     p_ver.add_argument("--region", choices=REGIONS, default=None, help="Filter by region")
+    p_ver.add_argument("--category", choices=categories, default=None, help="Filter by category")
+    p_ver.add_argument("--workers", type=int, default=4, help="Files verified in parallel (default: 4)")
     p_ver.set_defaults(func=cmd_verify)
 
-    p_stat = sub.add_parser("status", help="Show local dataset summary and `make dev` storage status")
+    p_stat = sub.add_parser("status", help="Show the local dataset and what FileGrid holds per region")
     p_stat.set_defaults(func=cmd_status)
 
     p_clean = sub.add_parser("clean", help="Delete generated files in backend/fault_videos/data")

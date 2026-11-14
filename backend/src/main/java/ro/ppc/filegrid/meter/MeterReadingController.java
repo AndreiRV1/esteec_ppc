@@ -1,5 +1,7 @@
 package ro.ppc.filegrid.meter;
 
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -39,9 +41,11 @@ public class MeterReadingController {
     private final ObjectMapper json;
     private final TraceIds traceIds;
     private final byte[] apiKey;
+    private final MeterRegistry metrics;
 
     public MeterReadingController(MeterReadingRepository repository, ObjectMapper json, TraceIds traceIds,
-                                  MeterProperties properties) {
+                                  MeterProperties properties, MeterRegistry metrics) {
+        this.metrics = metrics;
         this.repository = repository;
         this.json = json;
         this.traceIds = traceIds;
@@ -87,16 +91,34 @@ public class MeterReadingController {
         }
 
         boolean stored;
+        Timer.Sample sample = Timer.start(metrics);
         try {
             stored = repository.insertRaw(region.name(), meterId, readingId, periodStart, periodEnd, body,
                     sha256(body), traceIds.current());
+            record(sample, "success");
         } catch (DataIntegrityViolationException e) {
+            record(sample, "success"); // the database answered; the reading itself is invalid
             throw new ApiException(HttpStatus.valueOf(422), "unknown_meter",
                     "Meter " + meterId + " is not registered in region " + region);
+        } catch (RuntimeException e) {
+            record(sample, "error");
+            throw e;
         }
         return stored
                 ? ResponseEntity.accepted().body(Map.of("status", "ACCEPTED"))
                 : ResponseEntity.ok(Map.of("status", "DUPLICATE"));
+    }
+
+    /** Same metric as the file categories, so dashboards compare all four per storage. */
+    private void record(Timer.Sample sample, String outcome) {
+        sample.stop(Timer.builder("filegrid.storage.operation")
+                .description("Storage backend calls, per category and backend")
+                .tag("category", "METER_READING")
+                .tag("backend", "DATABASE")
+                .tag("operation", "put")
+                .tag("outcome", outcome)
+                .publishPercentileHistogram()
+                .register(metrics));
     }
 
     private static String sha256(byte[] bytes) {

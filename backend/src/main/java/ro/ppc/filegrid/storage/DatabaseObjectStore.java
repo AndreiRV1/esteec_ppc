@@ -51,6 +51,47 @@ public class DatabaseObjectStore implements ObjectStore {
     }
 
     @Override
+    public String beginParts(Address address) {
+        try {
+            jdbc.sql("INSERT INTO stored_file_blob (file_id, region, content) VALUES (:id, :region, ''::bytea)")
+                    .param("id", address.fileId()).param("region", address.region().name()).update();
+            return null;
+        } catch (DataAccessException e) {
+            throw new StorageUnavailableException(type(), "put", e);
+        }
+    }
+
+    @Override
+    public void putPart(Address address, String uploadId, int partNumber, long offset, Path source, long size) {
+        try {
+            // Keeps everything before the part and replaces the rest, so a repeated part cannot duplicate bytes.
+            jdbc.sql("""
+                            UPDATE stored_file_blob
+                            SET content = substring(content FROM 1 FOR :offset) || :chunk
+                            WHERE file_id = :id
+                            """)
+                    .param("offset", (int) offset)
+                    .param("chunk", Files.readAllBytes(source))
+                    .param("id", address.fileId())
+                    .update();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        } catch (DataAccessException e) {
+            throw new StorageUnavailableException(type(), "put", e);
+        }
+    }
+
+    @Override
+    public void completeParts(Address address, String uploadId) {
+        // Nothing to do: the row is already the object.
+    }
+
+    @Override
+    public void abortParts(Address address, String uploadId) {
+        delete(address);
+    }
+
+    @Override
     public InputStream open(Address address) {
         try {
             byte[] content = jdbc.sql("SELECT content FROM stored_file_blob WHERE file_id = :id")
