@@ -136,6 +136,7 @@ services:
       # Placeholders in the realm import file.
       FILEGRID_ADMIN_PASSWORD: ${FILEGRID_ADMIN_PASSWORD:?missing - run `make env`}
       FILEGRID_DEMO_CLIENT_PASSWORD: ${FILEGRID_DEMO_CLIENT_PASSWORD:?missing - run `make env`}
+      FILEGRID_DEMO_EMPLOYEE_PASSWORD: ${FILEGRID_DEMO_EMPLOYEE_PASSWORD:?missing - run `make env`}
     volumes:
       - ./infra/keycloak/realm:/opt/keycloak/data/import:ro
     ports:

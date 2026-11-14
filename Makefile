@@ -9,21 +9,16 @@ MAVEN := docker run --rm -v "$(CURDIR)":/repo -v filegrid-m2:/root/.m2 \
 	-v /var/run/docker.sock:/var/run/docker.sock -e TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal \
 	-w /repo/backend maven:3.9-eclipse-temurin-25 mvn -B
 
-.DEFAULT_GOAL := help
-.PHONY: help env up dev down ps logs psql migrate clean gen-data gen-storm gen-large-video seed-data verify-data data-status
-
-help: ## Show this help
-	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-16s %s\n", $$1, $$2}'
-.PHONY: help env up dev down ps logs psql migrate test demo clean
 SIM_IMAGE := filegrid/meter-simulator:local
 # Extra simulator flags, shared by `seed` and `sim` so both use the same fleet.
 SIM_ARGS  ?=
 
 .DEFAULT_GOAL := help
-.PHONY: help env up dev down ps logs psql migrate clean sim-build seed sim
+.PHONY: help env up dev down ps logs psql migrate test demo clean \
+	gen-data gen-storm gen-large-video seed-data verify-data data-status sim-build seed sim
 
 help: ## Show this help
-	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-9s %s\n", $$1, $$2}'
+	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-16s %s\n", $$1, $$2}'
 
 .env:
 	./scripts/gen-env.sh
@@ -88,6 +83,7 @@ verify-data: .env ## Verify SHA-256 integrity of stored fault JSONs & drone MP4s
 
 data-status: ## Show regional dataset summary and `make dev` storage counts
 	python3 backend/fault_videos/fault_videos.py status
+
 sim-build: ## Build the meter simulator image
 	docker build -q -t $(SIM_IMAGE) simulator >/dev/null
 

@@ -4,7 +4,7 @@
   "enabled": true,
   "sslRequired": "external",
   "registrationAllowed": true,
-  "registrationEmailAsUsername": true,
+  "registrationEmailAsUsername": false,
   "loginWithEmailAllowed": true,
   "duplicateEmailsAllowed": false,
   "resetPasswordAllowed": false,
@@ -27,6 +27,10 @@
       {
         "name": "admin",
         "description": "Reviews connection requests and reads their documents"
+      },
+      {
+        "name": "employee",
+        "description": "Field/office staff: uploads fault records, drone videos and connection requests on behalf of applicants"
       },
       {
         "name": "default-roles-filegrid",
@@ -129,6 +133,22 @@
         }
       ],
       "realmRoles": ["default-roles-filegrid"]
+    },
+    {
+      "username": "employee.demo@filegrid.local",
+      "email": "employee.demo@filegrid.local",
+      "emailVerified": true,
+      "firstName": "Employee",
+      "lastName": "Demo",
+      "enabled": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${FILEGRID_DEMO_EMPLOYEE_PASSWORD}",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["employee"]
     }
   ]
 }
