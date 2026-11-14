@@ -75,6 +75,11 @@ springdoc:
 
 filegrid:
   identity-pepper: ${FILEGRID_IDENTITY_PEPPER}
+  meters:
+    api-key: ${FILEGRID_METER_API_KEY}
+    # How often pending raw readings are turned into meter_reading rows.
+    process-interval: ${FILEGRID_METER_PROCESS_INTERVAL:5s}
+    batch-size: 200
   crypto:
     active-key-id: ${FILEGRID_MASTER_KEY_ID:kek-v1}
     master-keys:

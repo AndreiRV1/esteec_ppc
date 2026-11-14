@@ -71,6 +71,14 @@ Other targets:
 - `make ps`, `make logs`, `make psql`, `make migrate`, `make down`.
 - `make env`: adds variables that are new in `.env.example` to your `.env`, without touching existing secrets.
 - `make clean`: **deletes all data volumes**.
+Meter ingest: meters `POST /api/v1/meter-readings` with the shared `X-API-Key`
+(`FILEGRID_METER_API_KEY`). The message is stored as received in `meter_reading_raw`
+(`202`; a retry of the same `readingId` returns `200` and stores nothing). Every 5 s
+(`FILEGRID_METER_PROCESS_INTERVAL`) a job turns pending messages into `meter_reading`
+rows, one per interval, flagged `ANOMALY` for negative energy, register rollback,
+voltage outside 207–253 V or a consumption spike. Messages with future or misaligned
+timestamps are kept in the raw table as `REJECTED`.
+
 Meter simulator: `make seed` registers the simulated meters in the database,
 `make sim` starts sending readings to FileGrid on `localhost:8080`. See
 [`simulator/README.md`](simulator/README.md) for rate, anomalies and runtime control.

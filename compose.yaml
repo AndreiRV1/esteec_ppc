@@ -172,6 +172,7 @@ services:
       FILEGRID_OIDC_JWKS_URI: http://keycloak:8080/realms/filegrid/protocol/openid-connect/certs
       FILEGRID_MASTER_KEY_V1: ${FILEGRID_MASTER_KEY_V1:?missing - run `make env`}
       FILEGRID_IDENTITY_PEPPER: ${FILEGRID_IDENTITY_PEPPER:?missing - run `make env`}
+      FILEGRID_METER_API_KEY: ${FILEGRID_METER_API_KEY:?missing - run `make env`}
       # JSON logs, ready for Loki.
       LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
     ports:
