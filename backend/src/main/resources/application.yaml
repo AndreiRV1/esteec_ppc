@@ -81,6 +81,10 @@ springdoc:
 
 filegrid:
   identity-pepper: ${FILEGRID_IDENTITY_PEPPER}
+  keycloak:
+    # Admin API for creating applicant logins (registration). Blank secret = registration off.
+    url: ${FILEGRID_KEYCLOAK_URL:http://localhost:${KEYCLOAK_HOST_PORT:8180}/auth}
+    client-secret: ${FILEGRID_KEYCLOAK_BACKEND_SECRET:}
   meters:
     api-key: ${FILEGRID_METER_API_KEY}
     # How often pending raw readings are turned into meter_reading rows.

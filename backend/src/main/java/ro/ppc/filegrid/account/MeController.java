@@ -56,7 +56,7 @@ public class MeController {
                 .map(a -> a.substring(5).toLowerCase(Locale.ROOT))
                 .sorted()
                 .toList();
-        Optional<Account> account = accounts.find(Users.username(user));
+        Optional<Account> account = account(user);
         return new Me(Users.username(user), roles,
                 account.map(Account::region).orElse(null), account.map(Account::county).orElse(null),
                 account.map(Account::locality).orElse(null), account.map(Account::meterId).orElse(null));
@@ -95,8 +95,21 @@ public class MeController {
         return faults.activeIn(account.region(), account.county());
     }
 
+    /** The caller's account; a client whose racordare was accepted gets one on first use. */
+    private Optional<Account> account(Jwt user) {
+        String username = Users.username(user);
+        Optional<Account> account = accounts.find(username);
+        if (account.isPresent() || !isClient(user)) return account;
+        return accounts.provisionFromAcceptedRequest(username, user.getSubject());
+    }
+
+    private static boolean isClient(Jwt user) {
+        Object roles = user.getClaimAsMap("realm_access") == null ? null : user.getClaimAsMap("realm_access").get("roles");
+        return roles instanceof java.util.Collection<?> c && c.contains("client");
+    }
+
     private Account require(Jwt user) {
-        return accounts.find(Users.username(user)).orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
+        return account(user).orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
                 "no_customer_account", "This user has no customer account linked to a meter"));
     }
 }

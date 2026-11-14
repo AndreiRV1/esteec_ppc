@@ -31,6 +31,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/admin/**").hasRole(ADMIN)
                         // Smart meters have no user account: MeterReadingController checks X-API-Key.
                         .requestMatchers(HttpMethod.POST, "/api/v1/meter-readings").permitAll()
+                        // Registration: a racordare without an account creates the applicant's login.
+                        .requestMatchers(HttpMethod.POST, "/api/v1/public/connection-requests").permitAll()
                         // Applicants file their own requests; employees file them on an applicant's behalf.
                         .requestMatchers("/api/v1/connection-requests/**").hasAnyRole(CLIENT, EMPLOYEE)
                         .requestMatchers("/api/v1/fault-records/**", "/api/v1/drone-videos/**")

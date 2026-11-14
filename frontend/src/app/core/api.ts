@@ -5,7 +5,7 @@ import { AuthService } from './auth';
 import {
   AdminRequestDetail, Bucket, ConnectionFiles, ConnectionRequestForm, Consumption, ConsumptionSummary, Decision,
   DroneVideo, Fault, FaultFilter, FaultMetadata, FileCategory, Me, Page, Problem, Region, RequestFilter,
-  RequestSummary, StoragePolicy, StoragePolicyUpdate, StoredRef, SystemStatistics, UploadSession, UploadStatus,
+  Registration, RequestSummary, StoragePolicy, StoragePolicyUpdate, StoredRef, SystemStatistics, UploadSession, UploadStatus,
   VideoFilter, VideoUploadInit,
 } from './models';
 import { sha256OfBlob } from './sha256';
@@ -42,12 +42,12 @@ export class ApiService {
   }
 
   submitRequest(form: ConnectionRequestForm, files: ConnectionFiles): Promise<RequestSummary> {
-    const data = new FormData();
-    data.append('request', jsonPart(form));
-    data.append('cerereRacordare', files.cerereRacordare);
-    data.append('actIdentitate', files.actIdentitate);
-    data.append('aviz', files.aviz);
-    return firstValueFrom(this.http.post<RequestSummary>(`${BASE}/connection-requests`, data));
+    return firstValueFrom(this.http.post<RequestSummary>(`${BASE}/connection-requests`, requestData(form, files)));
+  }
+
+  /** Without an account: files the request and creates the applicant's client login. */
+  register(form: ConnectionRequestForm, files: ConnectionFiles): Promise<Registration> {
+    return firstValueFrom(this.http.post<Registration>(`${BASE}/public/connection-requests`, requestData(form, files)));
   }
 
   adminRequests = (filter: RequestFilter) =>
@@ -119,6 +119,15 @@ export class ApiService {
   }
 }
 
+function requestData(form: ConnectionRequestForm, files: ConnectionFiles): FormData {
+  const data = new FormData();
+  data.append('request', jsonPart(form));
+  data.append('cerereRacordare', files.cerereRacordare);
+  data.append('actIdentitate', files.actIdentitate);
+  data.append('aviz', files.aviz);
+  return data;
+}
+
 function jsonPart(value: unknown): Blob {
   return new Blob([JSON.stringify(value)], { type: 'application/json' });
 }
@@ -186,7 +195,8 @@ const MESSAGES: Record<string, string> = {
   storage_unavailable: 'Spațiul de stocare pentru această categorie nu răspunde. Încearcă din nou în câteva minute.',
   integrity_check_failed: 'Fișierul nu a trecut verificarea de integritate și nu a fost livrat.',
   not_found: 'Nu am găsit ce căutai.',
-  no_customer_account: 'Contul tău nu este asociat unui contor. Autentifică-te cu un cont de client (cl-…).',
+  registration_unavailable: 'Înregistrarea online nu este disponibilă acum. Încearcă din nou în câteva minute.',
+  no_customer_account: 'Contul tău nu are încă un contor. Contorul se alocă automat după ce o cerere de racordare este aprobată.',
 };
 
 /** A message a person can act on, in Romanian, for any failed call. */

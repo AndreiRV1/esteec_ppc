@@ -46,6 +46,7 @@ endef
 up: env ## Start everything behind the TLS proxy on https://localhost:8443 (nothing else is published)
 	$(call start,$(COMPOSE))
 	$(COMPOSE) $(PROFILES) up -d --build --no-deps --wait $(PLATFORM) $(FRONTEND)
+	FILEGRID_ENV_FILE=$(ENV_FILE) ./scripts/keycloak-sync.sh
 	$(COMPOSE) up -d --build --no-deps --wait backend
 	$(if $(filter 1,$(SIMULATOR)),$(COMPOSE) --profile simulator up -d --build --no-deps simulator)
 	@url=$(PUBLIC_URL); echo "FileGrid is up (local CA certificate: accept it once in the browser):"; \

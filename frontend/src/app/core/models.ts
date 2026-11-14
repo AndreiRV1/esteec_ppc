@@ -224,6 +224,13 @@ export interface RequestSummary {
   reviewedAt: string | null;
 }
 
+/** Answer to a registration: the new login, shown once. */
+export interface Registration {
+  username: string;
+  password: string;
+  request: RequestSummary;
+}
+
 export interface RequestDocument {
   id: string;
   documentType: string;

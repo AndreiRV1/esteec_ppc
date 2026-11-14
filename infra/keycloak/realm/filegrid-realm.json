@@ -133,6 +133,19 @@
           }
         }
       ]
+    },
+    {
+      "clientId": "filegrid-backend",
+      "name": "FileGrid backend (creates applicant logins)",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "${FILEGRID_KEYCLOAK_BACKEND_SECRET}",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "protocol": "openid-connect",
+      "defaultClientScopes": ["basic", "roles", "kc-admin-api"]
     }
   ],
   "users": [
@@ -183,6 +196,14 @@
         }
       ],
       "realmRoles": ["employee"]
+    },
+    {
+      "username": "service-account-filegrid-backend",
+      "enabled": true,
+      "serviceAccountClientId": "filegrid-backend",
+      "clientRoles": {
+        "realm-management": ["manage-users"]
+      }
     }
   ]
 }

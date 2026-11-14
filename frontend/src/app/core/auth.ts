@@ -55,6 +55,14 @@ export async function initKeycloakAuth(config: AppConfig): Promise<AuthService> 
   );
 }
 
+/** Pages anyone can open without logging in (Keycloak's "Register" link leads to /register). */
+export const PUBLIC_PATHS = ['/register'];
+
+/** Not logged in: no roles, no token. "Log in" is a full page load of the app, which goes through Keycloak. */
+export function anonymousAuth(): AuthService {
+  return new AuthService('', [], async () => null, () => window.location.assign('/'));
+}
+
 /** Mock mode: no Keycloak; the role comes from the switcher in the header. */
 export function initMockAuth(): AuthService {
   const stored = sessionStorage.getItem(MOCK_ROLE_KEY) as Role | null;
