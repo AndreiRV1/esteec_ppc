@@ -28,7 +28,7 @@ step "Storm files: $FAULTS_PER_REGION fault records per region"
 rm -rf "$DATA"
 python3 backend/fault_videos/fault_videos.py --data-dir "$DATA" generate --profile storm \
   --faults-per-region "$FAULTS_PER_REGION" --videos-per-region 0 --fault-min-mb 1 --fault-max-mb 4 >/dev/null 2>&1
-echo "$(find "$DATA/faults" -type f -name '*.json' | wc -l) files, $(du -sm "$DATA/faults" | cut -f1) MB"
+echo "$(find "$DATA/faults" -type f -name '*.json' ! -name '*.meta.json' | wc -l | tr -d ' ') files, $(du -sm "$DATA/faults" | cut -f1) MB"
 
 CLIENT_USER=$(sed -n 2p db/seed/clients.csv | cut -d, -f1); CLIENT_PASS=$(sed -n 2p db/seed/clients.csv | cut -d, -f2)
 CLIENT=$(token "$CLIENT_USER" "$CLIENT_PASS")

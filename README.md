@@ -27,7 +27,12 @@ Requirements: Docker with Compose v2, `make` and `openssl`. No local JDK or Node
 make up      # generates .env with random secrets on first run, then starts the full stack
 make demo-setup  # data for the showcase: meters, client logins, history, faults, videos; prints the logins
 make demo    # optional: end-to-end racordare walkthrough through the TLS proxy (needs curl + jq)
+make demo-storm      # optional: 10x fault storm, latency of the other categories (REPLICAS=2 for two backends)
+make demo-degraded   # optional: upload over a degraded link (latency, loss, outage) that resumes by itself
+make demo-corruption # optional: a file corrupted on storage is detected and never delivered
 ```
+
+Measured results of these and the Kubernetes run: [`docs/evidence.md`](docs/evidence.md).
 
 **Showcase:** follow [`docs/demo.md`](docs/demo.md) (about 15 minutes, every feature). The specimen documents
 for a racordare are in `demo/documents/` (regenerate with `scripts/make-demo-documents.py`).

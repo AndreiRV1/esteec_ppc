@@ -31,6 +31,8 @@ spec:
       containers:
         - name: postgres
           image: postgres:18-alpine@sha256:1018733457011bf88d81db98cf43aac6d5150afc18787dbe204771fedf80ff95
+          # Every backend replica holds a pool (5 in k8s): 40 replicas at the HPA maximums + Keycloak.
+          args: ["-c", "max_connections=300"]
           ports:
             - name: postgres
               containerPort: 5432

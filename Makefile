@@ -26,6 +26,7 @@ SIMULATOR ?= 1
 
 .DEFAULT_GOAL := help
 .PHONY: help env up dev down ps logs psql migrate test demo demo-setup clean seed-if-empty \
+	demo-corruption demo-degraded demo-storm demo-security \
 	gen-data gen-storm gen-large-video seed-data verify-data data-status sim-build seed seed-clients sim
 
 help: ## Show this help
@@ -85,6 +86,18 @@ demo-setup: $(ENV_FILE) ## Prepare the running stack for the showcase in docs/de
 
 demo: ## Walk through a racordare end to end against the running stack (needs `make up`)
 	FILEGRID_ENV_FILE=$(ENV_FILE) ./scripts/demo-racordare.sh
+
+demo-corruption: $(ENV_FILE) ## Corrupt a stored file behind FileGrid's back: the download is refused, file marked CORRUPTED
+	FILEGRID_ENV_FILE=$(ENV_FILE) ./scripts/demo-corruption.sh
+
+demo-degraded: $(ENV_FILE) ## Upload over a slow, lossy link with a 20 s outage: resumes by itself, SHA-256 verified
+	FILEGRID_ENV_FILE=$(ENV_FILE) ./scripts/demo-degraded.sh
+
+demo-storm: $(ENV_FILE) ## 10x fault-file storm while probing the other categories' latency (REPLICAS=2 for two backends)
+	FILEGRID_ENV_FILE=$(ENV_FILE) REPLICAS=$(or $(REPLICAS),1) ./scripts/demo-storm.sh
+
+demo-security: $(ENV_FILE) ## Storages unreachable from outside, API needs a token, stored documents are ciphertext
+	FILEGRID_ENV_FILE=$(ENV_FILE) ./scripts/demo-security.sh
 
 clean: ## Stop the stack and DELETE all data volumes
 	$(DEV) --profile backend-in-docker --profile frontend --profile simulator down -v
