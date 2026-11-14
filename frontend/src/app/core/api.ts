@@ -6,7 +6,7 @@ import {
   AdminRequestDetail, Bucket, ConnectionFiles, ConnectionRequestForm, Consumption, ConsumptionSummary, Decision,
   DroneVideo, Fault, FaultFilter, FiringAlert, FaultMetadata, FileCategory, Me, Page, Problem, Region, RequestFilter,
   Registration, RequestSummary, StoragePolicy, StoragePolicyUpdate, StoredRef, SystemStatistics, UploadSession, UploadStatus,
-  VideoFilter, VideoUploadInit,
+  VideoFilter, VideoUploadInit, Extraction,
 } from './models';
 import { sha256OfBlob } from './sha256';
 
@@ -81,6 +81,13 @@ export class ApiService {
   faults = (filter: FaultFilter) => this.get<Page<Fault>>('/fault-records', { ...filter });
   downloadFault = (id: string) => this.download(`/fault-records/${id}/file`);
   /** Marks a fault as restored now. */
+  /** Form autofill: the fields the server could read from a PDF (text layer or OCR) or a photo. Nothing is stored. */
+  extractDocument(kind: 'CONNECTION' | 'FAULT', file: File): Promise<Extraction> {
+    const data = new FormData();
+    data.append('file', file);
+    return firstValueFrom(this.http.post<Extraction>(`${BASE}/public/document-extraction`, data, { params: { kind } }));
+  }
+
   restoreFault = (id: string) => firstValueFrom(this.http.post<Fault>(`${BASE}/fault-records/${id}/restore`, {}));
 
   // ---- drone videos ----------------------------------------------------------

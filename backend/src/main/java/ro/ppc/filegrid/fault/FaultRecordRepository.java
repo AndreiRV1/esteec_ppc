@@ -98,9 +98,11 @@ public class FaultRecordRepository {
                 .list();
     }
 
-    /** Returns false if the fault does not exist or the time is before it occurred. */
+    /** Returns false if the fault does not exist, is already restored, or the time is before it occurred or in the future. */
     public boolean markRestored(UUID id, Instant restoredAt) {
-        return jdbc.sql("UPDATE fault_record SET restored_at = :at WHERE id = :id AND occurred_at <= :at")
+        return jdbc.sql("""
+                        UPDATE fault_record SET restored_at = :at
+                        WHERE id = :id AND restored_at IS NULL AND occurred_at <= :at AND :at <= now() + interval '5 minutes'""")
                 .param("id", id).param("at", utc(restoredAt)).update() == 1;
     }
 

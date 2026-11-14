@@ -71,7 +71,7 @@ public final class Downloads {
                 }
             };
             ResponseEntity.BodyBuilder response = ResponseEntity.status(partial ? HttpStatus.PARTIAL_CONTENT : HttpStatus.OK)
-                    .contentType(MediaType.parseMediaType(contentType))
+                    .contentType(mediaType(contentType))
                     .contentLength(length)
                     .header(HttpHeaders.CONTENT_DISPOSITION,
                             ContentDisposition.attachment().filename(filename).build().toString())
@@ -110,6 +110,15 @@ public final class Downloads {
             c.close();
         } catch (Exception ignored) {
             // best effort
+        }
+    }
+
+    /** A malformed stored type must not make the file undownloadable. */
+    private static MediaType mediaType(String contentType) {
+        try {
+            return MediaType.parseMediaType(contentType);
+        } catch (RuntimeException e) {
+            return MediaType.APPLICATION_OCTET_STREAM;
         }
     }
 }

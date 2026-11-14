@@ -374,7 +374,8 @@ def generate_drone_video_file(
 
     metadata_comment = (
         f"region={region};category=DRONE_VIDEO;county={power_line.county};"
-        f"line_code={power_line.code};drone_id={drone.drone_id}"
+        f"line_code={power_line.code};drone_id={drone.drone_id};"
+        f"flight_started_at={flight_started_at.strftime('%Y-%m-%dT%H:%M:%SZ')}"
     )
     target_bytes = int(max(1.0, target_size_mb) * 1024 * 1024)
     if not have_ffmpeg:
@@ -448,6 +449,9 @@ def generate_drone_video_file(
                 f"title=FileGrid Drone Inspection {region} - {power_line.code}",
                 "-metadata",
                 f"comment={metadata_comment}",
+                # mvhd creation time: any player (and the FileGrid form) shows when the flight started.
+                "-metadata",
+                f"creation_time={flight_started_at.strftime('%Y-%m-%dT%H:%M:%SZ')}",
                 "-movflags",
                 "+faststart",
                 str(file_path),
