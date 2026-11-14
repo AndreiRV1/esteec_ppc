@@ -10,6 +10,10 @@ MAVEN := docker run --rm -v "$(CURDIR)":/repo -v filegrid-m2:/root/.m2 \
 	-w /repo/backend maven:3.9-eclipse-temurin-25 mvn -B
 
 .DEFAULT_GOAL := help
+.PHONY: help env up dev down ps logs psql migrate clean gen-data gen-storm gen-large-video seed-data verify-data data-status
+
+help: ## Show this help
+	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-16s %s\n", $$1, $$2}'
 .PHONY: help env up dev down ps logs psql migrate test demo clean
 SIM_IMAGE := filegrid/meter-simulator:local
 # Extra simulator flags, shared by `seed` and `sim` so both use the same fleet.
@@ -67,6 +71,23 @@ clean: ## Stop the stack and DELETE all data volumes
 	$(DEV) --profile backend-in-docker down -v
 	$(DEV) down -v
 
+gen-data: ## Generate regional fault JSONs (1-10 MB) and drone MP4 videos
+	python3 backend/fault_videos/fault_videos.py generate
+
+gen-storm: ## Generate a 10x storm spike of fault JSONs and post-storm drone MP4s
+	python3 backend/fault_videos/fault_videos.py generate --profile storm
+
+gen-large-video: ## Generate a >1 GB drone inspection MP4 video for scalability testing
+	python3 backend/fault_videos/fault_videos.py generate --faults-per-region 0 --videos-per-region 0 --large-video --large-video-mb 1050
+
+seed-data: .env ## Ingest generated fault JSONs & drone MP4s into running `make dev` storages
+	python3 backend/fault_videos/fault_videos.py ingest
+
+verify-data: .env ## Verify SHA-256 integrity of stored fault JSONs & drone MP4s in `make dev`
+	python3 backend/fault_videos/fault_videos.py verify
+
+data-status: ## Show regional dataset summary and `make dev` storage counts
+	python3 backend/fault_videos/fault_videos.py status
 sim-build: ## Build the meter simulator image
 	docker build -q -t $(SIM_IMAGE) simulator >/dev/null
 

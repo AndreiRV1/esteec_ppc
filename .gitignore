@@ -9,6 +9,11 @@
 .vscode/
 *.iml
 
+# Python & generated test data (large fault JSONs and drone MP4 videos)
+__pycache__/
+*.py[cod]
+.venv/
+backend/fault_videos/data/
 # Build output
 backend/target/
 # Build output and generated data
