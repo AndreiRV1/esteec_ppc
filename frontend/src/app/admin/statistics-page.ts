@@ -1,7 +1,7 @@
 import { DecimalPipe } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { ApiService, Loader } from '../core/api';
-import { LabelPipe } from '../core/format';
+import { LabelPipe, label } from '../core/format';
 import { CategoryStorageFit, DayCategoryMetrics, RegionalGridInsight, SystemStatistics } from '../core/models';
 import { Status } from '../ui/status';
 
@@ -42,6 +42,12 @@ type SectionTab = 'storage' | 'peak' | 'grid';
 
       @if (stats.data(); as data) {
         @if (tab() === 'storage') {
+          @if (down(data); as names) {
+            <p class="notice error" role="alert">
+              Nu răspunde acum: {{ names }}. Încărcările și descărcările pe această stocare eșuează;
+              celelalte categorii funcționează. Cifrele de mai jos acoperă ultimele 24 de ore.
+            </p>
+          }
           @for (fit of data.storageFit; track fit.category) {
             <section class="card" [attr.aria-labelledby]="'cat-' + fit.category">
               <div class="page-head">
@@ -68,6 +74,9 @@ type SectionTab = 'storage' | 'peak' | 'grid';
                           <strong>{{ c.backend | label }}</strong>
                           @if (c.backend === fit.recommendedBackend) {
                             <span class="badge LOW">Optim</span>
+                          }
+                          @if (data.storageReachable?.[c.backend] === false) {
+                            <span class="badge REJECTED">Nu răspunde acum</span>
                           }
                         </td>
                         <td data-label="p50 (ms)" class="data">{{ n(c.p50Ms, ' ms') }}</td>
@@ -213,6 +222,7 @@ type SectionTab = 'storage' | 'peak' | 'grid';
     .grid-3 { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
     .warn-text { color: var(--warn-ink); font-weight: 600; }
     .recommended-row, .recommended-row:hover { background: var(--primary-tint); }
+    td .badge { margin-left: 8px; }
     .bars-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
     .bar-card { background: var(--surface); border-radius: var(--radius); padding: 16px; display: grid; gap: 10px; }
     .bar-pair { display: grid; gap: 6px; }
@@ -226,6 +236,11 @@ type SectionTab = 'storage' | 'peak' | 'grid';
   `,
 })
 export class StatisticsPage {
+  /** Storages that do not answer right now, for the warning above the 24 h numbers ('' when all are up). */
+  protected down(data: SystemStatistics): string {
+    return Object.entries(data.storageReachable ?? {}).filter(([, up]) => up === false).map(([b]) => label(b)).join(', ');
+  }
+
   private readonly api = inject(ApiService);
   protected readonly tab = signal<SectionTab>('storage');
   protected readonly stats = new Loader<SystemStatistics>();

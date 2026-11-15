@@ -373,6 +373,8 @@ export interface SystemStatistics {
   storageFit: CategoryStorageFit[];
   normalVsPeak: DayCategoryMetrics[];
   regionalInsights: RegionalGridInsight[];
+  /** Is each storage answering right now (Blackbox probe)? Absent when not measured. */
+  storageReachable?: Partial<Record<StorageBackend, boolean>>;
 }
 
 /** What the server read from a document for form autofill; keys are the form's field paths. */

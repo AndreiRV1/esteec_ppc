@@ -53,8 +53,10 @@ public class StatisticsController {
                              double peakErrorRatePercent, Long resumedOrRetried, boolean slaMet) {
     }
 
+    /** @param storageReachable live state of each storage now (empty without Prometheus); the rest covers 24 h */
     public record Statistics(Instant generatedAt, List<StorageFit> storageFit, List<DayMetrics> normalVsPeak,
-                             List<StatisticsRepository.RegionInsight> regionalInsights) {
+                             List<StatisticsRepository.RegionInsight> regionalInsights,
+                             Map<Backend, Boolean> storageReachable) {
     }
 
     private record Text(String size, String guarantee, Backend recommended, String why) {
@@ -123,7 +125,22 @@ public class StatisticsController {
             days.add(day(category, byDay, byCategory.getOrDefault(category.name(), List.of()),
                     category == Category.METER_READING ? duplicates : null));
         }
-        return new Statistics(Instant.now(), fit, days, repository.regionalInsights(Region.values()));
+        return new Statistics(Instant.now(), fit, days, repository.regionalInsights(Region.values()), reachable());
+    }
+
+    /** Blackbox probes each storage directly, independent of traffic: the same signal as the StorageBackendDown alert. */
+    private Map<Backend, Boolean> reachable() {
+        Map<Backend, Boolean> result = new EnumMap<>(Backend.class);
+        if (prometheus.available()) {
+            prometheus.vector("probe_success{job=\"storage\"}", "backend", Instant.now()).forEach((name, up) -> {
+                try {
+                    result.put(Backend.valueOf(name), up >= 1);
+                } catch (IllegalArgumentException ignored) {
+                    // a probe for a storage FileGrid does not know: not shown
+                }
+            });
+        }
+        return result;
     }
 
     private Long counter(String name, String tag, String value) {
