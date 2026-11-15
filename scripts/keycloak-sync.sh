@@ -4,6 +4,8 @@
 # the keycloak container's environment.
 #   - client `filegrid-backend` (confidential, service account) with the current secret
 #   - its service account may manage users (create applicant logins), via the admin API scope
+#   - the web and Grafana clients accept logins for the current FILEGRID_PUBLIC_URL (the import
+#     fixed the address at first boot; this lets you change the address without losing data)
 set -eu
 cd "$(dirname "$0")/.."
 docker compose --env-file "${FILEGRID_ENV_FILE:-.env}" exec -T keycloak bash -c '
@@ -31,4 +33,13 @@ id=$(kc get clients -r filegrid -q clientId=filegrid-backend --fields id --forma
 scope=$(kc get client-scopes -r filegrid --fields id,name --format csv --noquotes | grep ",kc-admin-api$" | cut -d, -f1)
 kc update "clients/$id/default-client-scopes/$scope" -r filegrid
 kc add-roles -r filegrid --uusername service-account-filegrid-backend --cclientid realm-management --rolename manage-users
+url=$FILEGRID_PUBLIC_URL
+id=$(kc get clients -r filegrid -q clientId=filegrid-web --fields id --format csv --noquotes)
+kc update "clients/$id" -r filegrid -s "redirectUris=[\"$url/*\",\"http://localhost:4200/*\"]" \
+  -s "webOrigins=[\"$url\",\"http://localhost:4200\"]" \
+  -s "attributes.\"post.logout.redirect.uris\"=$url/*##http://localhost:4200/*"
+id=$(kc get clients -r filegrid -q clientId=filegrid-grafana --fields id --format csv --noquotes)
+kc update "clients/$id" -r filegrid -s "redirectUris=[\"$url/grafana/login/generic_oauth\"]" \
+  -s "webOrigins=[\"$url\"]" -s "attributes.\"post.logout.redirect.uris\"=$url/*"
+echo "keycloak: login clients use $url"
 '

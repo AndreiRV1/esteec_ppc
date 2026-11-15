@@ -63,8 +63,8 @@ git checkout main                                                       # or the
 make env                                                                # .env with fresh random secrets
 ```
 
-Edit `.env` **before the first `make up`**. Keycloak imports its realm (login redirect URLs) once, with
-this address:
+Edit `.env` (if you change the address later, just run `make up` again: it updates Keycloak's login
+addresses without touching data):
 
 ```sh
 FILEGRID_PUBLIC_URL=https://filegrid-ppc.duckdns.org
@@ -85,7 +85,8 @@ make demo-security # check: only 80/443 open, 401 without a token, ciphertext in
 Open `https://filegrid-ppc.duckdns.org/`: a normal padlock, no certificate warning. The logins are the
 ones in `docs/demo.md`; their passwords are in `.env` on the server (`grep PASSWORD .env`).
 
-Already started with the wrong address? `make clean` (deletes all data), fix `.env`, `make up` again.
+Changed the address, or see *"Invalid parameter: redirect_uri"* on login? Fix `FILEGRID_PUBLIC_URL` in
+`.env` and run `make up`: `scripts/keycloak-sync.sh` points the login clients at the current address.
 
 ### 5. Keeping it running
 
