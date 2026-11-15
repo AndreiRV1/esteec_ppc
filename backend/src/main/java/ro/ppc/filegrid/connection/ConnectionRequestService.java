@@ -219,7 +219,7 @@ public class ConnectionRequestService {
     public RequestSummary decide(UUID clientId, Decision decision, String reason, String admin) {
         ClientRow row = require(clientId);
         if (row.submittedBy().equals(admin)) {
-            throw ApiException.forbidden("own_request", "Admins cannot review their own connection request");
+            throw ApiException.forbidden("own_request", "You cannot review a connection request you submitted");
         }
         String cleanReason = reason == null || reason.isBlank() ? null : reason.strip();
         if (decision == Decision.REJECTED && cleanReason == null) {

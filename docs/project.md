@@ -148,7 +148,8 @@ routed by the proxy). Configuration is in `backend/src/main/resources/applicatio
 | `POST /api/v1/public/document-extraction` | public: autofill for the registration form; reads, stores nothing |
 | `/api/v1/connection-requests/**` | `client`, `employee` |
 | `/api/v1/fault-records/**`, `/api/v1/drone-videos/**` | `employee`, `admin` |
-| `/api/v1/admin/**` | `admin` |
+| `/api/v1/admin/connection-requests/**` | `employee`, `admin` (review queue; nobody decides a request they filed) |
+| `/api/v1/admin/**` (policies, statistics, alerts) | `admin` |
 | `/api/v1/me/**` | any logged-in user |
 
 `RoleMatrixTest` checks this whole table against the running application.

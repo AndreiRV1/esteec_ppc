@@ -8,13 +8,12 @@ interface NavItem { path: string; text: string; roles: Role[]; icon: string }
 
 // 24px stroke icons, one consistent weight.
 const NAV: NavItem[] = [
-  { path: '/admin/connection-requests', text: 'Cereri de racordare', roles: ['admin'], icon: 'M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6' },
+  { path: '/admin/connection-requests', text: 'Cereri de racordare', roles: ['admin', 'employee'], icon: 'M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6' },
   { path: '/admin/storage-policies', text: 'Politici de stocare', roles: ['admin'], icon: 'M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3zM4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3' },
   { path: '/admin/statistics', text: 'Statistici și decizii', roles: ['admin'], icon: 'M4 20h16M7 16v-5M12 16V6M17 16v-8' },
   { path: '/admin/monitoring', text: 'Monitorizare', roles: ['admin'], icon: 'M3 12h4l3-7 4 14 3-7h4' },
   { path: '/employee/fault-records', text: 'Avarii', roles: ['employee', 'admin'], icon: 'M13 3 6 13h5l-1 8 7-10h-5z' },
   { path: '/employee/drone-videos', text: 'Video dronă', roles: ['employee', 'admin'], icon: 'M3 7h12v10H3zM15 10l6-3v10l-6-3' },
-  { path: '/connection-requests/new', text: 'Cerere de racordare', roles: ['employee'], icon: 'M7 3h7l5 5v13H7zM14 3v5h5M12 11v6M9 14h6' },
   { path: '/client', text: 'Consumul meu', roles: ['client'], icon: 'M3 11 12 4l9 7M5 10v10h14V10M10 20v-5h4v5' },
 ];
 

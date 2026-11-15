@@ -28,14 +28,15 @@ export const routes: Routes = [
   {
     path: 'admin',
     canActivate: [roleGuard],
-    data: { roles: ['admin'] },
+    // Employees reach the racordare review queue; the other admin pages check again below.
+    data: { roles: ['admin', 'employee'] },
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'connection-requests' },
       { path: 'connection-requests', loadComponent: () => import('./admin/requests-page').then((m) => m.RequestsPage) },
       { path: 'connection-requests/:id', loadComponent: () => import('./admin/request-detail-page').then((m) => m.RequestDetailPage) },
-      { path: 'storage-policies', loadComponent: () => import('./admin/policies-page').then((m) => m.PoliciesPage) },
-      { path: 'statistics', loadComponent: () => import('./admin/statistics-page').then((m) => m.StatisticsPage) },
-      { path: 'monitoring', loadComponent: () => import('./admin/monitoring-page').then((m) => m.MonitoringPage) },
+      { path: 'storage-policies', canActivate: [roleGuard], data: { roles: ['admin'] }, loadComponent: () => import('./admin/policies-page').then((m) => m.PoliciesPage) },
+      { path: 'statistics', canActivate: [roleGuard], data: { roles: ['admin'] }, loadComponent: () => import('./admin/statistics-page').then((m) => m.StatisticsPage) },
+      { path: 'monitoring', canActivate: [roleGuard], data: { roles: ['admin'] }, loadComponent: () => import('./admin/monitoring-page').then((m) => m.MonitoringPage) },
       // Legacy Romanian route redirects
       { path: 'cereri', redirectTo: 'connection-requests', pathMatch: 'full' },
       { path: 'cereri/:id', redirectTo: 'connection-requests/:id', pathMatch: 'full' },

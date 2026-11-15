@@ -28,7 +28,7 @@ import ro.ppc.filegrid.connection.ConnectionTypes.Status;
 import ro.ppc.filegrid.storage.Downloads;
 import ro.ppc.filegrid.storage.VerifiedContent;
 
-/** Review queue for admins (realm role {@code admin}). */
+/** Review queue for staff (realm roles {@code employee}, {@code admin}). */
 @RestController
 @RequestMapping("/api/v1/admin/connection-requests")
 @Tag(name = "Connection requests (admin)", description = "Review, download and accept/reject racordare requests")

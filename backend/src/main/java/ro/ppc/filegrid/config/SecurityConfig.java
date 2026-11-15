@@ -28,6 +28,8 @@ public class SecurityConfig {
         http.authorizeHttpRequests(auth -> auth
                         .requestMatchers("/actuator/health/**", "/actuator/prometheus", "/actuator/info").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
+                        // Employees process racordare requests too: review, download, accept/reject.
+                        .requestMatchers("/api/v1/admin/connection-requests/**").hasAnyRole(EMPLOYEE, ADMIN)
                         .requestMatchers("/api/v1/admin/**").hasRole(ADMIN)
                         // Smart meters have no user account: MeterReadingController checks X-API-Key.
                         .requestMatchers(HttpMethod.POST, "/api/v1/meter-readings").permitAll()
