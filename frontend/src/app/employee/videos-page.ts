@@ -116,6 +116,10 @@ type Phase = 'idle' | 'hashing' | 'uploading' | 'pausing' | 'paused' | 'finishin
           @if (stored(); as ref) {
             <div class="notice success" role="status">
               <p><strong>Video-ul a fost stocat.</strong> {{ checksumMatches() ? 'Amprenta de pe server corespunde cu cea calculată local.' : '' }}</p>
+              @if (ref.fallbackFrom) {
+                <p class="fallback">⚠ {{ ref.fallbackFrom | label }} nu răspunde acum, așa că fișierul a fost salvat pe
+                  <strong>{{ ref.backend | label }}</strong>. Este verificat și se descarcă la fel ca oricare altul.</p>
+              }
               <p>SHA-256: <span class="data">{{ ref.sha256 }}</span></p>
               <fg-operation />
             </div>

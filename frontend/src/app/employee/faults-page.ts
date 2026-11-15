@@ -69,6 +69,10 @@ const emptyUpload = () => ({
             <div class="notice success" role="status">
               <p><strong>Înregistrarea a fost încărcată</strong> și este disponibilă pentru dispecerat.</p>
               <p>SHA-256: <span class="data">{{ ref.sha256 }}</span></p>
+              @if (ref.fallbackFrom) {
+                <p class="fallback">⚠ {{ ref.fallbackFrom | label }} nu răspunde acum, așa că fișierul a fost salvat pe
+                  <strong>{{ ref.backend | label }}</strong>. Este verificat și se descarcă la fel ca oricare altul.</p>
+              }
               <fg-operation />
             </div>
           }

@@ -21,6 +21,7 @@ import java.time.Instant;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -92,10 +93,9 @@ public class StoredFileService {
         if (spec.requireEncryption() && !policy.encryptAtRest()) {
             throw new IllegalStateException("Policy for " + spec.category() + " must encrypt at rest");
         }
-        ObjectStore store = storeFor(policy.backend());
         UUID id = UuidV7.generate();
-        ObjectStore.Address address = new ObjectStore.Address(id, spec.region(),
-                store.locationFor(policy, id, Instant.now()));
+        Target primary = target(policy, id);
+        Target target = primary; // where the file actually lands: the stand-in storage if the policy's is down
         EnvelopeEncryption.DataKey key = policy.encryptAtRest() ? encryption.newDataKey() : null;
 
         Path spool = tempFiles.create("store-");
@@ -106,18 +106,12 @@ public class StoredFileService {
             Map<String, String> fileTags = Map.of("filegrid.file_id", id.toString(),
                     "filegrid.category", spec.category().name());
             traceIds.inSpan("db record file", fileTags, () -> {
-                files.insertUploading(id, spec.region(), spec.category(), policy.backend(), address.location(),
+                files.insertUploading(id, spec.region(), spec.category(), policy.backend(), primary.address().location(),
                         spec.originalFilename(), spec.contentType(), key, spec.uploadedBy(), traceIds.current());
                 return null;
             });
             recorded = true;
-            timedRun(spec.category(), policy.backend(), "put", () -> {
-                // The storage call itself: which file, where, how big.
-                traceIds.tag("filegrid.file_id", id.toString());
-                traceIds.tag("filegrid.location", address.location() == null ? "postgresql:stored_file_blob" : address.location());
-                traceIds.tag("filegrid.bytes", Long.toString(written.storedSize()));
-                store.put(address, spool, written.storedSize());
-            });
+            target = putWithFallback(spec.category(), target, spool, written.storedSize());
             uploaded = true;
             traceIds.inSpan("db confirm file", fileTags, () -> {
                 tx.executeWithoutResult(status -> {
@@ -129,7 +123,8 @@ public class StoredFileService {
             return files.find(id).orElseThrow();
         } catch (RuntimeException e) {
             if (uploaded) {
-                bestEffort(() -> store.delete(address), "delete orphaned object " + id);
+                Target landed = target;
+                bestEffort(() -> landed.store().delete(landed.address()), "delete orphaned object " + id);
             }
             if (recorded) {
                 bestEffort(() -> files.markStatus(id, StoredFile.Status.FAILED), "mark " + id + " FAILED");
@@ -138,6 +133,72 @@ public class StoredFileService {
         } finally {
             TempFiles.deleteQuietly(spool);
         }
+    }
+
+    /** Where a file is written: the policy, its storage, and the address inside that storage. */
+    record Target(StoragePolicy policy, ObjectStore store, ObjectStore.Address address) {
+    }
+
+    Target target(StoragePolicy policy, UUID id) {
+        ObjectStore store = storeFor(policy.backend());
+        return new Target(policy, store, new ObjectStore.Address(id, policy.region(), store.locationFor(policy, id, Instant.now())));
+    }
+
+    /**
+     * The other file storage, for when the policy's storage is down: FTP and S3 stand in for each other, at the
+     * category's default directory or bucket (minio-init creates the buckets), with the same encryption and size
+     * limit. The database has no stand-in: without it FileGrid cannot record any file anyway.
+     */
+    Optional<Target> fallbackFor(Target primary) {
+        StoragePolicy p = primary.policy();
+        StorageBackendType other = switch (p.backend()) {
+            case FTP -> StorageBackendType.S3;
+            case S3 -> StorageBackendType.FTP;
+            case DATABASE -> null;
+        };
+        if (other == null) {
+            return Optional.empty();
+        }
+        String slug = switch (p.category()) {
+            case FAULT_RECORD -> "fault-records";
+            case CONNECTION_DOCUMENTS -> "connection-documents";
+            case DRONE_VIDEO -> "drone-videos";
+        };
+        String place = other == StorageBackendType.S3 ? "filegrid-" + slug : "/files/" + slug;
+        return Optional.of(target(new StoragePolicy(p.category(), p.region(), other, place, p.encryptAtRest(),
+                p.maxSizeBytes()), primary.address().fileId()));
+    }
+
+    /** Writes to the policy's storage, or to its stand-in if that one is down; returns where the file landed. */
+    private Target putWithFallback(FileCategory category, Target primary, Path spool, long size) {
+        try {
+            put(category, primary, spool, size);
+            return primary;
+        } catch (StorageUnavailableException down) {
+            Target fallback = fallbackFor(primary).orElseThrow(() -> down);
+            UUID id = primary.address().fileId();
+            log.warn("{} is down ({}); writing file {} to {} instead", primary.policy().backend(), down.getMessage(), id,
+                    fallback.policy().backend());
+            files.relocate(id, fallback.policy().backend(), fallback.address().location(), primary.policy().backend());
+            try {
+                put(category, fallback, spool, size);
+            } catch (StorageUnavailableException alsoDown) {
+                alsoDown.addSuppressed(down);
+                throw alsoDown;
+            }
+            return fallback;
+        }
+    }
+
+    private void put(FileCategory category, Target target, Path spool, long size) {
+        timedRun(category, target.policy().backend(), "put", () -> {
+            // The storage call itself: which file, where, how big.
+            ObjectStore.Address address = target.address();
+            traceIds.tag("filegrid.file_id", address.fileId().toString());
+            traceIds.tag("filegrid.location", address.location() == null ? "postgresql:stored_file_blob" : address.location());
+            traceIds.tag("filegrid.bytes", Long.toString(size));
+            target.store().put(address, spool, size);
+        });
     }
 
     /**

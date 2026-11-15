@@ -1,6 +1,9 @@
 package ro.ppc.filegrid.connection;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.doThrow;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -33,11 +36,15 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.MockMultipartHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import ro.ppc.filegrid.config.KeycloakRealmRoleConverter;
+import ro.ppc.filegrid.storage.FtpObjectStore;
+import ro.ppc.filegrid.storage.StorageBackendType;
+import ro.ppc.filegrid.storage.StorageUnavailableException;
 import ro.ppc.filegrid.support.TestStorages;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
@@ -64,6 +71,10 @@ class ConnectionRequestFlowTest {
 
     @Autowired
     MockMvc mvc;
+
+    // The real vsftpd store; one test makes it fail to stand for "FTP is down".
+    @MockitoSpyBean
+    FtpObjectStore ftp;
 
     @Autowired
     ObjectMapper json;
@@ -245,6 +256,9 @@ class ConnectionRequestFlowTest {
 
     @Test
     void storageFailureLeavesNoHalfCreatedRequest() throws Exception {
+        // S3 (the policy) points at a missing bucket, and its stand-in FTP is down too: nothing can be stored.
+        doThrow(new StorageUnavailableException(StorageBackendType.FTP, "put", new java.io.IOException("down")))
+                .when(ftp).put(any(), any(), anyLong());
         db.update("""
                 UPDATE filegrid.storage_policy SET target = 'bucket-that-does-not-exist'
                 WHERE category = 'CONNECTION_DOCUMENTS' AND region = 'MUNTENIA'""");

@@ -176,8 +176,13 @@ names, FTP paths without `.`/`..`), are audited, and show in the admin UI's *Pol
    backend for the dashboards). FTP writes `<path>.part` and renames it when complete, so a reader never sees half a file.
 5. Transaction 2: mark `STORED` with both checksums **and** run the category's own insert (fault row, client
    row, ...) in the same transaction (span *db confirm file*). The file and its metadata appear together or not at all.
-6. On any failure: delete the orphaned object, mark the record `FAILED`, rethrow. A backend that cannot be
-   reached throws `StorageUnavailableException` → `503 storage_unavailable` for that category only.
+6. **Fallback:** if the policy's storage cannot be reached (`StorageUnavailableException`), the file is written to
+   the stand-in storage instead, FTP ↔ S3, at the category's default directory or bucket, with the same encryption
+   and size limit. The record is moved there and `stored_file.fallback_from` keeps the storage the policy asked for;
+   the upload response carries `backend` and `fallbackFrom`, and the UI says so. Video uploads move at start, before
+   any part is stored. The database has no stand-in.
+7. On any other failure, or if the stand-in is down too: delete the orphaned object, mark the record `FAILED`,
+   rethrow (`503 storage_unavailable` for that category only).
 
 ### Read path (`retrieveVerified`)
 
@@ -423,7 +428,7 @@ The acts follow [`demo.md`](demo.md). For each one: what the audience sees, and 
 | **8** 10x storm in one category | other categories' p50/p95 unchanged; `REPLICAS=2` | Stateless backends behind Caddy DNS load balancing; per-category metrics tag; `demo-storm.sh` probes; in k8s, separate Deployments + HPA per category. |
 | **9a** Corruption detected | download refused, file CORRUPTED, alert e-mail | `retrieveVerified` checksum mismatch → `CORRUPTED` + integrity counter → `FileIntegrityFailure` → Alertmanager → Mailpit; `demo-corruption.sh` edits the file on FTP directly. |
 | **9b** Degraded link | upload stalls, resumes, verified | `demo-degraded.sh` + `infra/degraded` (netem); generator uploader retries with backoff and asks the server for the confirmed offset; same `ResumableUploadService`. |
-| **9c** A storage goes down | 503 only for that category; others work; alert and "Rezolvat" | `StorageUnavailableException` → `503 storage_unavailable` per category; Blackbox probe → `StorageBackendDown`; confirmed files untouched (status only changes on verified writes). |
+| **9c** A storage goes down | uploads for FTP land on S3 and say so; *Statistici* shows FTP down; alert and "Rezolvat" | `StoredFileService.putWithFallback` (FTP ↔ S3, `fallback_from`, V4 migration); `ResumableUploadService.begin` for videos; `storageReachable` from `probe_success` on the statistics page; Blackbox probe → `StorageBackendDown`; confirmed files untouched. |
 | **10** Security | one port, 401, ciphertext in MinIO, HMAC in DB, no secrets in Git | Networks in `compose.yaml`; `SecurityConfig`; `EnvelopeEncryption`; `IdentityHasher`; `.gitignore` + `gen-env.sh`; checks in `demo-security.sh`. |
 | **11** Trace one operation; per-category and per-storage metrics; alerts | paste the ID operație → one trace to storage | `TraceIdHeaderFilter` (`X-Trace-Id`), OpenTelemetry spans in `StoredFileService`, Caddy entry spans → Tempo; `CategoryObservationConvention`; dashboards; `AlertsController` + 16 rules. |
 | **12** Statistics with interpretation | storage per category, peak vs normal, grid insights | `StatisticsController` + `PrometheusQueries` + `StatisticsRepository`; `admin/statistics-page.ts`. Values never invented (`null` until measured). |

@@ -25,7 +25,9 @@ public record StoredFile(
         String uploadedBy,
         Instant createdAt,
         Instant storedAt,
-        Instant lastVerifiedAt) {
+        Instant lastVerifiedAt,
+        // The storage the policy asked for, when that one was down and the file went elsewhere; else null.
+        StorageBackendType fallbackFrom) {
 
     public enum Status {
         UPLOADING,

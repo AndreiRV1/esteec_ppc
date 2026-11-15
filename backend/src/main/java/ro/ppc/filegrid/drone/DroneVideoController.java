@@ -128,7 +128,8 @@ public class DroneVideoController {
         });
         View video = repository.findByFile(file.id()).orElseThrow(() -> ApiException.notFound("Drone video"));
         return ResponseEntity.created(URI.create("/api/v1/drone-videos/" + video.id()))
-                .body(new Created(video.id(), file.id(), file.sha256()));
+                .body(new Created(video.id(), file.id(), file.sha256(), file.backend().name(),
+                        file.fallbackFrom() == null ? null : file.fallbackFrom().name()));
     }
 
     @Operation(summary = "Search videos (newest flights first). Filters are optional.")

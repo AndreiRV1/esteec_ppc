@@ -1,5 +1,9 @@
 package ro.ppc.filegrid.storage;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.doThrow;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -29,6 +33,7 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
@@ -56,6 +61,10 @@ class FileIngestFlowTest {
     MockMvc mvc;
     @Autowired
     ObjectMapper json;
+
+    // The real vsftpd store, made to fail on demand to stand for "FTP is down".
+    @MockitoSpyBean
+    FtpObjectStore ftp;
 
     @AfterEach
     void restoreDefaultPolicies() {
@@ -157,6 +166,39 @@ class FileIngestFlowTest {
                 .andExpect(status().isUnprocessableContent());
         mvc.perform(get("/api/v1/drone-videos?region=BANAT&lineCode=LEA-TEST-01").with(employee("emp-1")))
                 .andExpect(jsonPath("$.total").value(1));
+    }
+
+    @Test
+    void whenThePolicyStorageIsDownFilesGoToTheOtherStorageAndTheResponseSaysSo() throws Exception {
+        StorageUnavailableException down = new StorageUnavailableException(StorageBackendType.FTP, "put",
+                new java.io.IOException("Connection refused"));
+        doThrow(down).when(ftp).put(any(), any(), anyLong());
+        doThrow(down).when(ftp).beginParts(any());
+
+        // Fault records: the policy says FTP.
+        byte[] recording = random(150_000, 21);
+        JsonNode created = uploadFault("BANAT", "TM", recording);
+        assertThat(created.get("backend").asString()).isEqualTo("S3");
+        assertThat(created.get("fallbackFrom").asString()).isEqualTo("FTP");
+        String faultUrl = "/api/v1/fault-records/" + created.get("id").asString();
+        mvc.perform(get(faultUrl).with(admin("admin-1")))
+                .andExpect(jsonPath("$.file.backend").value("S3"))
+                .andExpect(jsonPath("$.file.fallbackFrom").value("FTP"));
+        assertThat(download(faultUrl + "/file", null, 200).getResponse().getContentAsByteArray()).isEqualTo(recording);
+
+        // Drone videos with an FTP policy move to S3 when the upload starts, before any part is stored.
+        policy("DRONE_VIDEO", "DOBROGEA", Map.of("backend", "FTP", "target", "/files/drone-videos",
+                "encryptAtRest", false, "maxSizeBytes", 10737418240L)).andExpect(status().isOk());
+        byte[] video = random(1_000_000, 22);
+        String uploadId = startUpload("DOBROGEA", "CT", video.length, sha256(video)).get("uploadId").asString();
+        String parts = "/api/v1/drone-videos/uploads/" + uploadId;
+        part(parts, 1, video, "emp-1").andExpect(status().isNoContent());
+        JsonNode done = json.readTree(mvc.perform(post(parts + "/complete").with(employee("emp-1")))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString());
+        assertThat(done.get("backend").asString()).isEqualTo("S3");
+        assertThat(done.get("fallbackFrom").asString()).isEqualTo("FTP");
+        assertThat(download("/api/v1/drone-videos/" + done.get("id").asString() + "/file", null, 200)
+                .getResponse().getContentAsByteArray()).isEqualTo(video);
     }
 
     // ------------------------------------------------------------------ helpers

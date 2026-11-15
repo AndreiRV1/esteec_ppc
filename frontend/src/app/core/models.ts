@@ -113,6 +113,10 @@ export interface StoredRef {
   id: string;
   fileId: string;
   sha256: string;
+  /** Where the file was written. */
+  backend?: StorageBackend;
+  /** The storage the policy asked for, when it was down and the file went to `backend` instead. */
+  fallbackFrom?: StorageBackend | null;
 }
 
 // ---- drone videos ---------------------------------------------------------------

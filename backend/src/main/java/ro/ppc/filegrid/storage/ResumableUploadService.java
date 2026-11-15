@@ -7,7 +7,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.DigestInputStream;
 import java.security.MessageDigest;
-import java.time.Instant;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.UUID;
@@ -86,19 +85,25 @@ public class ResumableUploadService {
             throw new ApiException(HttpStatus.CONTENT_TOO_LARGE, "file_too_large",
                     "File exceeds the " + policy.maxSizeBytes() + " byte limit of its storage policy");
         }
-        ObjectStore store = storedFiles.storeFor(policy.backend());
         UUID id = UuidV7.generate();
-        ObjectStore.Address address = new ObjectStore.Address(id, spec.region(),
-                store.locationFor(policy, id, Instant.now()));
+        StoredFileService.Target target = storedFiles.target(policy, id);
 
         tx.executeWithoutResult(status -> {
-            files.insertUploading(id, spec.region(), spec.category(), policy.backend(), address.location(),
+            files.insertUploading(id, spec.region(), spec.category(), policy.backend(), target.address().location(),
                     spec.originalFilename(), spec.contentType(), null, spec.uploadedBy(), traceIds.current());
             files.beginUpload(id, null, declaredSize, declaredSha256);
             inSameTransaction.accept(files.find(id).orElseThrow());
         });
         try {
-            String backendUploadId = store.beginParts(address);
+            String backendUploadId;
+            try {
+                backendUploadId = target.store().beginParts(target.address());
+            } catch (StorageUnavailableException down) {
+                // No part is stored yet, so the whole upload can still move to the stand-in storage (FTP <-> S3).
+                StoredFileService.Target fallback = storedFiles.fallbackFor(target).orElseThrow(() -> down);
+                files.relocate(id, fallback.policy().backend(), fallback.address().location(), policy.backend());
+                backendUploadId = fallback.store().beginParts(fallback.address());
+            }
             if (backendUploadId != null) {
                 files.beginUpload(id, backendUploadId, declaredSize, declaredSha256);
             }

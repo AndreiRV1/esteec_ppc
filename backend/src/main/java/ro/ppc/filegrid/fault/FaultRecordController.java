@@ -98,7 +98,8 @@ public class FaultRecordController {
             audit.record(metadata.region(), user.getSubject(), "FAULT_RECORD_UPLOADED", "fault_record", id, details);
         });
         return ResponseEntity.created(URI.create("/api/v1/fault-records/" + id))
-                .body(new Created(id, stored.id(), stored.sha256()));
+                .body(new Created(id, stored.id(), stored.sha256(), stored.backend().name(),
+                        stored.fallbackFrom() == null ? null : stored.fallbackFrom().name()));
     }
 
     @Operation(summary = "Search fault records (newest first). Filters are optional.")

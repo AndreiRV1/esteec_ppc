@@ -260,8 +260,11 @@ then every file is downloaded again and its SHA-256 compared (3/3).
 docker compose stop ftp
 ```
 
-Try a fault upload for a region on FTP: a clean `503 storage_unavailable`. Meanwhile racordare (S3) and
-meters (database) keep working; show a client login and the Grafana *Contoare* ingest. Move on to act 10.
+Upload a fault (e.g. `demo/faults/avarie-voluntari.pdf`, its policy says FTP): it still succeeds, and the
+message says *"⚠ FTP nu răspunde acum, așa că fișierul a fost salvat pe S3"*. FileGrid wrote it to the
+stand-in storage (FTP ↔ S3) and remembers it (`stored_file.fallback_from`); the download is verified as usual.
+*Statistici și decizii* shows **FTP: Nu răspunde acum** within about 40 s. Racordare (S3) and meters (database)
+keep working; show a client login and the Grafana *Contoare* ingest. Move on to act 10.
 About 2 minutes later, **StorageBackendDown** shows in *Alerte active*, and Mailpit gets
 *"[FileGrid] Cerință în pericol: Categoriile stocate pe FTP …"*. Then:
 

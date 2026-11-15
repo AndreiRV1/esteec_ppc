@@ -31,7 +31,8 @@ public final class FaultRecords {
             @Size(max = 4000) String description) {
     }
 
-    public record Created(UUID id, UUID fileId, String sha256) {
+    /** @param fallbackFrom the storage the policy asked for, when it was down and the file was written to {@code backend} */
+    public record Created(UUID id, UUID fileId, String sha256, String backend, String fallbackFrom) {
     }
 
     public record View(UUID id, Region region, String county, String locality, String substationCode,

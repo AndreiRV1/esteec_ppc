@@ -46,6 +46,15 @@ public class StoredFileRepository {
                 .update();
     }
 
+    /** Points a file that is still uploading at another storage, because the policy's storage is down. */
+    public void relocate(UUID id, StorageBackendType backend, String location, StorageBackendType fallbackFrom) {
+        jdbc.sql("""
+                        UPDATE stored_file SET backend = :backend, location = :location, fallback_from = :from
+                        WHERE id = :id AND status = 'UPLOADING'""")
+                .param("id", id).param("backend", backend.name()).param("location", location)
+                .param("from", fallbackFrom.name()).update();
+    }
+
     public void markStatus(UUID id, StoredFile.Status status) {
         jdbc.sql("UPDATE stored_file SET status = :status WHERE id = :id")
                 .param("id", id)
@@ -134,7 +143,8 @@ public class StoredFileRepository {
                 rs.getString("uploaded_by"),
                 instant(rs, "created_at"),
                 instant(rs, "stored_at"),
-                instant(rs, "last_verified_at"));
+                instant(rs, "last_verified_at"),
+                rs.getString("fallback_from") == null ? null : StorageBackendType.valueOf(rs.getString("fallback_from")));
     }
 
     public static Instant instant(ResultSet rs, String column) throws SQLException {
