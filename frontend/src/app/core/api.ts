@@ -220,6 +220,8 @@ export function problemMessage(error: unknown): string {
 function problemText(problem: Problem): string {
   const known = problem.code ? MESSAGES[problem.code] : undefined;
   if (known) return known;
+  // The server explains which rule the policy breaks; show it rather than the generic 400 text.
+  if (problem.code === 'invalid_storage_policy' && problem.detail) return `Politica de stocare nu este validă: ${problem.detail}`;
   if (problem.status === 0) return 'Nu am putut contacta serverul. Verifică conexiunea și încearcă din nou.';
   if (problem.status === 401) return 'Sesiunea a expirat. Reîncarcă pagina pentru a te autentifica din nou.';
   if (problem.status === 403) return 'Contul tău nu are acces la această operațiune.';

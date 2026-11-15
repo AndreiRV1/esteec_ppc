@@ -24,6 +24,11 @@ interface Row {
  * Storage policy: where each file category is written, per region. Saving a row
  * applies to the next upload; files already stored stay where they are.
  */
+/** Default FTP directory (/files/<slug>) and S3 bucket (filegrid-<slug>) per category; minio-init creates the buckets. */
+const TARGET_SLUGS: Record<FileCategory, string> = {
+  FAULT_RECORD: 'fault-records', CONNECTION_DOCUMENTS: 'connection-documents', DRONE_VIDEO: 'drone-videos',
+};
+
 @Component({
   imports: [FormsModule, DatePipe, LabelPipe],
   template: `
@@ -65,7 +70,7 @@ interface Row {
                   </label>
                   <label class="check">
                     <input name="encrypt" type="checkbox" [(ngModel)]="row.encryptAtRest"
-                           [disabled]="category === 'CONNECTION_DOCUMENTS'" />
+                           [disabled]="category === 'CONNECTION_DOCUMENTS' || category === 'DRONE_VIDEO'" />
                     Criptare la stocare
                   </label>
                   <button class="small" type="submit" [disabled]="form.invalid || row.saving">Salvează</button>
@@ -130,7 +135,13 @@ export class PoliciesPage {
     if (row.backend === 'DATABASE') {
       row.target = '';
       row.maxSizeMb = Math.min(row.maxSizeMb, DATABASE_MAX_MB);
+      return;
     }
+    // A target only fits its own backend (FTP directory vs S3 bucket): never carry it over.
+    const slug = TARGET_SLUGS[row.policy.category];
+    row.target = row.backend === row.policy.backend && row.policy.target
+      ? row.policy.target
+      : row.backend === 'S3' ? `filegrid-${slug}` : `/files/${slug}`;
   }
 
   protected async save(row: Row): Promise<void> {
@@ -141,7 +152,8 @@ export class PoliciesPage {
       backend: row.backend,
       target: row.backend === 'DATABASE' ? null : row.target.trim(),
       // Connection documents hold personal data: always encrypted, whatever the form state.
-      encryptAtRest: row.policy.category === 'CONNECTION_DOCUMENTS' ? true : row.encryptAtRest,
+      // Videos arrive in resumable parts, which the server cannot encrypt at rest.
+      encryptAtRest: row.policy.category === 'CONNECTION_DOCUMENTS' ? true : row.policy.category === 'DRONE_VIDEO' ? false : row.encryptAtRest,
       maxSizeBytes: Math.round(row.maxSizeMb * MB),
     };
     try {
