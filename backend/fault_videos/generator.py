@@ -390,9 +390,11 @@ def generate_drone_video_file(
 
             line1 = f"RETELE ELECTRICE ROMANIA  |  REGION\\: {region}  |  JUDET\\: {power_line.county}"
             line2 = f"LINE\\: {power_line.code} ({power_line.voltage_kv} kV)  |  DRONE\\: {drone.drone_id}"
+            # Kept outside the f-string: a backslash inside {...} needs Python 3.12+.
+            flight_label = flight_started_at.strftime("%Y-%m-%d %H\\:%M UTC")
             line3 = (
                 f"GPS\\: {power_line.start_lat:.4f}N {power_line.start_lon:.4f}E  |  "
-                f"FLIGHT\\: {flight_started_at.strftime('%Y-%m-%d %H\\:%M UTC')}  |  T\\: %{{pts\\:hms}}"
+                f"FLIGHT\\: {flight_label}  |  T\\: %{{pts\\:hms}}"
             )
 
             # Adding light sensor noise ensures realistic bitrate (~1–1.2 MB/s -> ~4.5 MB per 4s segment)
