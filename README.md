@@ -112,6 +112,7 @@ docs/                     API contract (api.md), platform & observability (platf
 
 - [`docs/project.md`](docs/project.md) — the whole project in one place: architecture, every component, how each demo step is implemented, known limits.
 - [`docs/demo.md`](docs/demo.md) — the showcase script, with the data to generate and a spec coverage table.
+- [`docs/deploy.md`](docs/deploy.md) — putting it on the internet for free (Oracle Cloud Always Free + DuckDNS + Let's Encrypt), what is public, rate limits.
 - [`docs/api.md`](docs/api.md) — REST API contract, endpoints, error codes, and storage-policy rules.
 - [`docs/platform.md`](docs/platform.md) — reverse proxy routing, OIDC issuer, Grafana SSO, dashboards, alerts, and compose scaling.
 - [`docs/racordare.md`](docs/racordare.md) & [`docs/connection-documents.md`](docs/connection-documents.md) — connection request workflow and envelope encryption design.

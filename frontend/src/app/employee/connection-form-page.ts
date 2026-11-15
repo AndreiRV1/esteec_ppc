@@ -1,7 +1,7 @@
 import { Component, inject, input, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { ApiService, problemMessage } from '../core/api';
+import { ApiService, problemMessage, toProblem } from '../core/api';
 import { AuthService } from '../core/auth';
 import { COUNTIES, LabelPipe, toDateInput } from '../core/format';
 import { ConnectionRequestForm, Registration, RequestSummary } from '../core/models';
@@ -240,8 +240,9 @@ export class ConnectionFormPage {
       this.autofill.set(filled
         ? { ok: true, text: `Am completat ${filled} câmpuri din „${file.name}”${source === 'OCR' ? ' (document scanat, citit prin OCR)' : ''}. Verifică-le înainte de trimitere.` }
         : { ok: false, text: `Nu am găsit date de completat în „${file.name}”. Completează formularul manual.` });
-    } catch {
-      this.autofill.set({ ok: false, text: 'Documentul nu a putut fi citit automat. Completează formularul manual.' });
+    } catch (error) {
+      const limited = toProblem(error).status === 429;
+      this.autofill.set({ ok: false, text: limited ? problemMessage(error) : 'Documentul nu a putut fi citit automat. Completează formularul manual.' });
     } finally {
       this.reading.set(false);
     }

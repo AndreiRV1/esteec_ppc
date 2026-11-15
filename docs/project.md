@@ -444,8 +444,9 @@ The acts follow [`demo.md`](demo.md). For each one: what the audience sees, and 
 
 Found in the code reviews and not fixed yet (each needs a decision or infrastructure, not just a code change):
 
-- **Registration has no rate limit**, and the extraction endpoint is public too (bounded by 2 concurrent OCR jobs
-  and size/page limits). Add per-IP rate limiting at the proxy or ingress before going public.
+- **Rate limits are per replica**: `PublicRateLimitFilter` keeps its counters in memory (10 registrations per
+  hour, 30 autofill reads per 10 minutes, per IP), so N replicas allow N times that. Move it to the proxy or a
+  shared store before running the public endpoints on many replicas.
 - **Keycloak's own sign-up action is still enabled** (`registrationAllowed: true`): the login page's
   "Request a connection" link depends on it. Fix: keep the link in a custom theme and disable registration, or
   bind the registration flow to a deny step.

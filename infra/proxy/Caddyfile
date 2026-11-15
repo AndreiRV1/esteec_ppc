@@ -4,8 +4,9 @@
 #   /grafana/*  -> Grafana (admin SSO)
 #   /mailpit/*  -> alert inbox (operators only)
 #   the rest    -> frontend (or a placeholder page while it is not deployed)
-# The certificate comes from Caddy's own local CA ("tls internal"); put a real
-# one here (or an ACME domain) for a public deployment.
+# Certificate: Caddy's own local CA by default ("tls internal"). A public deployment sets
+# FILEGRID_TLS to an e-mail address (compose.public.yaml), which makes Caddy get a real
+# Let's Encrypt certificate for the host in FILEGRID_PUBLIC_URL and renew it by itself.
 {
 	admin off
 	auto_https disable_redirects
@@ -42,7 +43,7 @@
 }
 
 https://{$FILEGRID_SITE_HOST:localhost}:8443 {
-	tls internal
+	tls {$FILEGRID_TLS:internal}
 	encode zstd gzip
 	log {
 		output stdout

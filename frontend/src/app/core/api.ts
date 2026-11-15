@@ -197,6 +197,7 @@ const MESSAGES: Record<string, string> = {
   reason_required: 'Respingerea are nevoie de un motiv.',
   already_decided: 'Cererea a fost deja soluționată de alt administrator.',
   own_request: 'Nu poți soluționa propria cerere.',
+  rate_limited: 'Prea multe încercări de la această adresă. Încearcă din nou peste câteva minute.',
   invalid_identity_number: 'CNP-ul sau CUI-ul nu este valid.',
   unsupported_document_format: 'Documentele trebuie să fie PDF, JPEG sau PNG.',
   document_missing: 'Lipsește un document obligatoriu.',

@@ -1,0 +1,9 @@
+# Public deployment overlay: a real Let's Encrypt certificate instead of the local CA.
+# Turn it on with COMPOSE_FILE=compose.yaml:compose.public.yaml in .env (docs/deploy.md).
+services:
+  proxy:
+    environment:
+      FILEGRID_TLS: ${FILEGRID_ACME_EMAIL:?set FILEGRID_ACME_EMAIL in .env (Let's Encrypt account e-mail)}
+    ports:
+      # Let's Encrypt checks the domain over plain HTTP (HTTP-01); Caddy only answers the challenge there.
+      - "0.0.0.0:80:80"

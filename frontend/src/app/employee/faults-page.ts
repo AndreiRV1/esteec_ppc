@@ -1,7 +1,7 @@
 import { DatePipe, DecimalPipe } from '@angular/common';
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ApiService, Loader, downloadAndSave, problemMessage } from '../core/api';
+import { ApiService, Loader, downloadAndSave, problemMessage, toProblem } from '../core/api';
 import { BytesPipe, LabelPipe, countiesOf, dayToIso, localToIso } from '../core/format';
 import { Fault, FaultFilter, Page, REGIONS, Region, SEVERITIES, Severity, StoredRef } from '../core/models';
 import { Status } from '../ui/status';
@@ -259,8 +259,8 @@ export class FaultsPage {
       this.autoFilledNote.set(count
         ? `Am completat ${count} câmpuri din raport${source === 'OCR' ? ' (document scanat, citit prin OCR)' : ''}. Verifică-le înainte de încărcare.`
         : 'Nu am găsit date de completat în acest document. Completează câmpurile manual.');
-    } catch {
-      this.autoFilledNote.set('Documentul nu a putut fi citit automat. Completează câmpurile manual.');
+    } catch (error) {
+      this.autoFilledNote.set(toProblem(error).status === 429 ? problemMessage(error) : 'Documentul nu a putut fi citit automat. Completează câmpurile manual.');
     }
   }
 
